@@ -27,6 +27,10 @@ test('shortPath replaces home with ~ only on a path boundary', () => {
   assert.equal(shortPath('/Users/meow/x', '/Users/me', 40), '/Users/meow/x');
 });
 
+test('shortPath keeps ~ before nested folders in the displayed path', () => {
+  assert.equal(shortPath('/Users/me/personal/zu-term', '/Users/me', 40), '~/personal/zu-term');
+});
+
 test('shortPath truncates from the left keeping last segments', () => {
   assert.equal(shortPath('/Users/me/a/very/long/path/project', '/Users/me', 18), '…/path/project');
   assert.equal(shortPath('/a/supercalifragilistic', undefined, 5), '…/supercalifragilistic');

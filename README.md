@@ -16,7 +16,7 @@ Terminal de escritorio para trabajar con agentes, apps y logs en una sola ventan
 
 ## Requisitos
 
-- Node 24 y pnpm 11; Rust estable (`rustup`).
+- Node 24 (≥ 24.8; `node-24` o `node`) y pnpm 11; Rust estable (`rustup`).
 - macOS: Xcode Command Line Tools. Linux: [dependencias de Tauri](https://v2.tauri.app/start/prerequisites/#linux) (`webkit2gtk-4.1`, etc.).
 - `zsh` con la integración de carpeta (abajo).
 
@@ -34,8 +34,8 @@ Otros: `make check` (lint, tipos, pruebas, cobertura, build y auditoría), `make
 ## Instalar
 
 ```bash
-make install-app     # compila en release e instala Zu Term
-make uninstall-app   # la desinstala
+make install         # compila en release e instala Zu Term
+make uninstall       # la desinstala
 ```
 
 - macOS: copia `Zu Term.app` a `/Applications` (aparece en Launchpad y Spotlight). El `.dmg` queda en `apps/desktop/src-tauri/target/release/bundle/dmg/` para instalar en otro Mac.

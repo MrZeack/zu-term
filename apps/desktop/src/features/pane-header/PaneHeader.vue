@@ -171,8 +171,8 @@ const commit = () => emit('rename', draft.value);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  direction: rtl;
-  text-align: left;
+  direction: ltr;
+  text-align: right;
   min-width: 0;
   max-width: 48%;
 }

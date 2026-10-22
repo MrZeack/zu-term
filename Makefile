@@ -1,14 +1,21 @@
 SHELL := /bin/bash
 ROOT_DIR := $(CURDIR)
+RUN_DIR := $(ROOT_DIR)/.run
+NODE_BIN_DIR := $(RUN_DIR)/node-bin
 # Pinned toolchains from Homebrew (macOS) take precedence; harmless elsewhere.
-export PATH := /opt/homebrew/opt/node@24/bin:/opt/homebrew/opt/rustup/bin:$(HOME)/.cargo/bin:$(PATH)
+export PATH := $(NODE_BIN_DIR):/opt/homebrew/opt/node@24/bin:/opt/homebrew/opt/rustup/bin:$(HOME)/.cargo/bin:$(PATH)
 
 TAURI_DIR := apps/desktop/src-tauri
 
-.PHONY: env install up down restart logs status test lint typecheck audit build check bundle \
-	install-app uninstall-app
+.PHONY: env deps install uninstall up down restart logs status test lint typecheck audit build check bundle
 
 env: ## Check tools, Node version and .env
+	@set -e; \
+		mkdir -p "$(NODE_BIN_DIR)"; \
+		rm -f "$(NODE_BIN_DIR)/node"; \
+		node_path="$$(scripts/resolve-node.sh)"; \
+		ln -sfn "$$node_path" "$(NODE_BIN_DIR)/node"; \
+		echo "Usando Node $$(node --version) ($$node_path)"
 	@for tool in node pnpm cargo lsof zsh; do \
 		command -v $$tool >/dev/null || { echo "Falta $$tool" >&2; exit 1; }; done
 	@want=$$(cat .nvmrc); have=$$(node -p 'process.versions.node.split(".")[0]'); \
@@ -16,10 +23,16 @@ env: ## Check tools, Node version and .env
 	@[ -f .env ] || cp .env.example .env
 	@chmod 600 .env
 
-install: env ## Install JS dependencies from the lockfile
+deps: env ## Install JS dependencies from the lockfile
 	@pnpm install --frozen-lockfile
 
-up: install ## Start the desktop app in dev mode (background)
+install: deps ## Build in release and install into the OS app launcher
+	@scripts/install-app.sh install
+
+uninstall: ## Remove the installed app (only if it is Zu Term)
+	@scripts/install-app.sh uninstall
+
+up: deps ## Start the desktop app in dev mode (background)
 	@scripts/desktop.sh start
 
 down: ## Stop everything started by `up`
@@ -33,34 +46,29 @@ logs: ## Follow the app log
 status: ## Show whether the app is running
 	@scripts/desktop.sh status
 
-test: install ## Unit tests: frontend, Rust, shell integration and operations
+test: deps ## Unit tests: frontend, Rust, shell integration and operations
 	@pnpm run test
 	@cd $(TAURI_DIR) && cargo test --quiet
 	@zsh shell/osc7_spec.zsh
+	@bash scripts/node-selection.test.sh
 	@bash scripts/operations.test.sh
 
-lint: install ## ESLint + Prettier + rustfmt + clippy
+lint: deps ## ESLint + Prettier + rustfmt + clippy
 	@pnpm run lint
 	@cd $(TAURI_DIR) && cargo fmt --check && cargo clippy --quiet --all-targets -- -D warnings
 
-typecheck: install
+typecheck: deps
 	@pnpm run typecheck
 
-audit: install ## Known vulnerabilities in npm packages and Rust crates
+audit: deps ## Known vulnerabilities in npm packages and Rust crates
 	@pnpm audit --audit-level low
 	@command -v cargo-audit >/dev/null || { echo "Falta cargo-audit (brew install cargo-audit o cargo install cargo-audit --locked)" >&2; exit 1; }
 	@cd $(TAURI_DIR) && cargo audit --deny warnings
 
-build: install ## Build the frontend bundle
+build: deps ## Build the frontend bundle
 	@pnpm run build
 
-check: install lint typecheck test audit build ## Everything above
+check: deps lint typecheck test audit build ## Everything above
 
-bundle: install ## Build the installable app (.app/.dmg on macOS, .deb/.AppImage on Linux)
+bundle: deps ## Build the installable app (.app/.dmg on macOS, .deb/.AppImage on Linux)
 	@cd apps/desktop && pnpm tauri build
-
-install-app: install ## Build in release and install into the OS app launcher
-	@scripts/install-app.sh install
-
-uninstall-app: ## Remove the installed app (only if it is Zu Term)
-	@scripts/install-app.sh uninstall

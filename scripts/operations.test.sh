@@ -8,9 +8,18 @@ fail() {
   exit 1
 }
 
-for target in up down logs status install-app uninstall-app audit; do
+for target in up down logs status install uninstall audit; do
   grep -qE "^$target:" Makefile || fail "falta el target '$target'"
 done
+grep -qE '^deps:' Makefile || fail "falta el target interno 'deps'"
+grep -q 'scripts/install-app.sh install' Makefile || fail "install no instala la aplicación"
+grep -q 'scripts/install-app.sh uninstall' Makefile || fail "uninstall no elimina la aplicación"
+if grep -qE '^(install-app|uninstall-app):' Makefile; then
+  fail "siguen expuestos los targets install-app/uninstall-app"
+fi
+grep -q 'resolve-node.sh' Makefile || fail "Makefile no usa la resolución de Node"
+grep -q 'node-24' scripts/resolve-node.sh || fail "la resolución de Node no contempla node-24"
+[[ -x scripts/resolve-node.sh ]] || fail "scripts/resolve-node.sh no es ejecutable"
 grep -qE '^build:' Makefile || fail "falta el target 'build'"
 grep -qE '^check:.*build' Makefile || fail "check no incluye build"
 grep -q '"check": "pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build"' package.json \
