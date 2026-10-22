@@ -13,16 +13,19 @@ usable_node="$(scripts/resolve-node.sh || true)"
 
 temp_dir="$(mktemp -d)"
 trap 'rm -rf "$temp_dir"' EXIT
+bash_path="$(command -v bash)"
 
 mkdir "$temp_dir/preferred"
+ln -s "$bash_path" "$temp_dir/preferred/bash"
 ln -s "$usable_node" "$temp_dir/preferred/node-24"
-selected="$(PATH="$temp_dir/preferred:$PATH" scripts/resolve-node.sh)"
+selected="$(PATH="$temp_dir/preferred" scripts/resolve-node.sh)"
 [[ "$selected" == "$temp_dir/preferred/node-24" ]] \
   || fail "no se prioriza node-24: $selected"
 
 mkdir "$temp_dir/fallback"
+ln -s "$bash_path" "$temp_dir/fallback/bash"
 ln -s "$usable_node" "$temp_dir/fallback/node"
-selected="$(PATH="$temp_dir/fallback:$PATH" scripts/resolve-node.sh)"
+selected="$(PATH="$temp_dir/fallback" scripts/resolve-node.sh)"
 [[ "$selected" == "$temp_dir/fallback/node" ]] \
   || fail "no se usa node cuando es Node 24: $selected"
 
