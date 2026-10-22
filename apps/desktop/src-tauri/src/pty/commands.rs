@@ -11,15 +11,15 @@ fn home_dir() -> PathBuf {
     std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/"))
 }
 
-/// The user's login shell, started in `cwd`. `CONSOLE_TERMINAL` lets shell
+/// The user's login shell, started in `cwd`. `ZYLO_TERMINAL` lets shell
 /// integration (shell/osc7.zsh) know it runs here.
 fn shell_command(cwd: Option<&str>) -> CommandBuilder {
     let mut command = CommandBuilder::new_default_prog();
     command.cwd(resolve_cwd(cwd, &home_dir()));
     command.env("TERM", "xterm-256color");
     command.env("COLORTERM", "truecolor");
-    command.env("TERM_PROGRAM", "console");
-    command.env("CONSOLE_TERMINAL", "1");
+    command.env("TERM_PROGRAM", "zylo");
+    command.env("ZYLO_TERMINAL", "1");
     command
 }
 

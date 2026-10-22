@@ -1,4 +1,4 @@
-# console
+# Zylo
 
 Terminal de escritorio para trabajar con agentes, apps y logs en una sola ventana: splits anidados, cabecera grande con nombre y ruta por split y menú contextual nativo. macOS y Linux.
 
@@ -29,7 +29,18 @@ make logs     # log en vivo
 make down     # detiene todo lo iniciado
 ```
 
-Otros: `make check` (lint, tipos y pruebas), `make test`, `make bundle` (instalable `.app/.dmg` o `.deb/.AppImage`).
+Otros: `make check` (lint, tipos y pruebas), `make test`, `make bundle` (solo genera `.app/.dmg` o `.deb/.AppImage`).
+
+## Instalar
+
+```bash
+make install-app     # compila en release e instala Zylo
+make uninstall-app   # la desinstala
+```
+
+- macOS: copia `Zylo.app` a `/Applications` (aparece en Launchpad y Spotlight). El `.dmg` queda en `apps/desktop/src-tauri/target/release/bundle/dmg/` para instalar en otro Mac.
+- Linux: instala el AppImage en `~/.local/bin/zylo` con su entrada en el menú de aplicaciones (`~/.local/share/applications/zylo.desktop`).
+- Solo reemplaza una instalación previa si su identificador es `fyi.voza.zylo`. La app no está firmada: en otro Mac, la primera vez ábrela con clic derecho → Abrir.
 
 ## Uso
 
@@ -51,7 +62,7 @@ Otros: `make check` (lint, tipos y pruebas), `make test`, `make bundle` (instala
 Sin ella, la ruta de la cabecera no se actualiza y los splits nuevos abren en la carpeta inicial (necesaria si la shell corre tras un wrapper como `kiro-cli-term`). En `~/.zshrc`, antes de bloques que deban ir al final:
 
 ```zsh
-[[ -n "$CONSOLE_TERMINAL" && -f "$HOME/personal/console/shell/osc7.zsh" ]] && source "$HOME/personal/console/shell/osc7.zsh"
+[[ -n "$ZYLO_TERMINAL" && -f "$HOME/personal/console/shell/osc7.zsh" ]] && source "$HOME/personal/console/shell/osc7.zsh"
 ```
 
 ## Seguridad

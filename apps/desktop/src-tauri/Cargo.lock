@@ -381,17 +381,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "console-desktop"
-version = "0.1.0"
-dependencies = [
- "portable-pty",
- "serde",
- "tauri",
- "tauri-build",
- "tauri-plugin-clipboard-manager",
-]
-
-[[package]]
 name = "cookie"
 version = "0.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4801,4 +4790,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "27bc9d5b815bc103f142aa054f561d9187d191692ec7c2d1e2b4737f8dbd7296"
 dependencies = [
  "zune-core",
+]
+
+[[package]]
+name = "zylo"
+version = "0.1.0"
+dependencies = [
+ "portable-pty",
+ "serde",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-clipboard-manager",
 ]

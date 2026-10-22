@@ -8,7 +8,7 @@ Terminal de una sola ventana orientada a agentes, apps y logs, con splits, cabec
 
 - **UI (`apps/desktop/src`)**: Vue 3 + Pinia. `layout` guarda el árbol binario de splits; los terminales se dibujan como lista plana con clave posicionada desde el árbol (`layout-geometry.ts`), para que dividir no remonte ni mate shells existentes. `pane-actions` concentra las acciones que usan el menú (`context-menu`) y los atajos (`shortcuts`). `terminal` envuelve xterm.js y detecta la carpeta con OSC 7.
 - **Backend (`apps/desktop/src-tauri`)**: Tauri 2. `pty` abre una PTY por split (`portable-pty`) con la login shell del usuario, transmite la salida por un `Channel` desde un hilo lector (UTF-8 reensamblado entre fragmentos) y mata el proceso al cerrar el split.
-- **Shell (`shell/osc7.zsh`)**: emite OSC 7 en cada prompt y `cd` cuando `CONSOLE_TERMINAL` está definido.
+- **Shell (`shell/osc7.zsh`)**: emite OSC 7 en cada prompt y `cd` cuando `ZYLO_TERMINAL` está definido.
 
 ## Runtime local
 
@@ -17,6 +17,7 @@ Terminal de una sola ventana orientada a agentes, apps y logs, con splits, cabec
 ## Decisiones
 
 - 2026-10-22 · Tauri 2 + xterm.js en lugar de WezTerm o Ghostty: menú contextual nativo y cabecera por split, ninguno de los dos lo ofrecía completo.
+- 2026-10-22 · Nombre Zylo e identificador `fyi.voza.zylo` (dominio voza.fyi); `make install-app` instala en `/Applications` o en el menú de aplicaciones de Linux, sin firma de código.
 - 2026-10-22 · CSS propio en lugar de Tailwind: la UI es una sola pantalla con pocos estilos.
 - 2026-10-22 · Sin E2E: el runner E2E del stack apunta a navegador, no a la ventana Tauri; la UI se verifica a mano y su lógica con pruebas unitarias.
 

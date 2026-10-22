@@ -132,7 +132,7 @@ status() {
   if running; then
     local app="compilando" pid
     for pid in $(descendants "$(recorded_pid)"); do
-      ps -o command= -p "$pid" 2>/dev/null | grep -qF "target/debug/console-desktop" && app="ventana abierta"
+      ps -o command= -p "$pid" 2>/dev/null | grep -qF "target/debug/zylo" && app="ventana abierta"
     done
     echo "desktop: activo · PID $(recorded_pid) · Vite :$WEB_PORT $(port_busy && echo escuchando || echo sin respuesta) · app $app"
   else

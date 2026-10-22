@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    console_desktop_lib::run()
+    zylo_lib::run()
 }

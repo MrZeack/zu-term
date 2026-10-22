@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Console",
+  "productName": "Zylo",
   "version": "0.1.0",
-  "identifier": "dev.bloque9.console",
+  "identifier": "fyi.voza.zylo",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://127.0.0.1:17601",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Console",
+        "title": "Zylo",
         "width": 1280,
         "height": 800,
         "minWidth": 480,

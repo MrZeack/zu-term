@@ -8,7 +8,7 @@ fail() {
   exit 1
 }
 
-for target in up down logs status; do
+for target in up down logs status install-app uninstall-app; do
   grep -qE "^$target:" Makefile || fail "falta el target '$target'"
 done
 if grep -nE '\b(pkill|killall|fuser -k)\b|lsof -ti' Makefile scripts/*.sh | grep -v 'operations.test.sh'; then
