@@ -5,7 +5,7 @@ export PATH := /opt/homebrew/opt/node@24/bin:/opt/homebrew/opt/rustup/bin:$(HOME
 
 TAURI_DIR := apps/desktop/src-tauri
 
-.PHONY: env install up down restart logs status test lint typecheck audit check bundle \
+.PHONY: env install up down restart logs status test lint typecheck audit build check bundle \
 	install-app uninstall-app
 
 env: ## Check tools, Node version and .env
@@ -33,25 +33,28 @@ logs: ## Follow the app log
 status: ## Show whether the app is running
 	@scripts/desktop.sh status
 
-test: env ## Unit tests: frontend, Rust, shell integration and operations
+test: install ## Unit tests: frontend, Rust, shell integration and operations
 	@pnpm run test
 	@cd $(TAURI_DIR) && cargo test --quiet
 	@zsh shell/osc7_spec.zsh
 	@bash scripts/operations.test.sh
 
-lint: env ## ESLint + Prettier + rustfmt + clippy
+lint: install ## ESLint + Prettier + rustfmt + clippy
 	@pnpm run lint
 	@cd $(TAURI_DIR) && cargo fmt --check && cargo clippy --quiet --all-targets -- -D warnings
 
-typecheck: env
+typecheck: install
 	@pnpm run typecheck
 
-audit: env ## Known vulnerabilities in npm packages and Rust crates
+audit: install ## Known vulnerabilities in npm packages and Rust crates
 	@pnpm audit --audit-level low
 	@command -v cargo-audit >/dev/null || { echo "Falta cargo-audit (brew install cargo-audit o cargo install cargo-audit --locked)" >&2; exit 1; }
 	@cd $(TAURI_DIR) && cargo audit --deny warnings
 
-check: lint typecheck test audit ## Everything above
+build: install ## Build the frontend bundle
+	@pnpm run build
+
+check: install lint typecheck test audit build ## Everything above
 
 bundle: install ## Build the installable app (.app/.dmg on macOS, .deb/.AppImage on Linux)
 	@cd apps/desktop && pnpm tauri build

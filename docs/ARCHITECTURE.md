@@ -2,13 +2,14 @@
 
 ## Objetivo
 
-Terminal de una sola ventana orientada a agentes, apps y logs, con splits, cabecera por split (nombre grande y ruta) y menú contextual nativo, en macOS y Linux.
+Terminal orientada a agentes, apps y logs, con splits, cabecera por split (comando, nombre, título y ruta), restauración de sesión y menú contextual nativo, en macOS y Linux.
 
 ## Capas
 
-- **UI (`apps/desktop/src`)**: Vue 3 + Pinia. `layout` guarda el árbol binario de splits; los terminales se dibujan como lista plana con clave posicionada desde el árbol (`layout-geometry.ts`), para que dividir no remonte ni mate shells existentes. `pane-actions` concentra las acciones que usan el menú (`context-menu`) y los atajos (`shortcuts`). `terminal` envuelve xterm.js y detecta la carpeta con OSC 7.
+- **UI (`apps/desktop/src`)**: Vue 3 + Pinia. `layout` guarda el árbol binario de splits; los terminales se dibujan como lista plana con clave posicionada desde el árbol (`layout-geometry.ts`), para que dividir no remonte ni mate shells existentes. `pane-actions` concentra las acciones que usan el menú (`context-menu`), la cabecera y los atajos (`shortcuts`). `session` valida y guarda en `localStorage` solo el layout y metadatos restaurables. `terminal` envuelve xterm.js, detecta la carpeta con OSC 7 y el comando activo con un OSC privado.
 - **Backend (`apps/desktop/src-tauri`)**: Tauri 2. `pty` abre una PTY por split (`portable-pty`) con la login shell del usuario, transmite la salida por un `Channel` desde un hilo lector (UTF-8 reensamblado entre fragmentos) y mata el proceso al cerrar el split.
-- **Shell (`shell/osc7.zsh`)**: emite OSC 7 en cada prompt y `cd` cuando `ZYLO_TERMINAL` está definido.
+- **Integración nativa (`apps/desktop/src-tauri/src/dock.rs`)**: en macOS añade `Nueva ventana` al menú contextual del Dock usando AppKit; la ventana dinámica carga la misma aplicación y recibe el capability de las ventanas `zylo-window-*`.
+- **Shell (`shell/osc7.zsh`)**: emite OSC 7 en cada prompt y `cd`, y comunica el comando activo en `preexec`/`precmd` cuando `ZYLO_TERMINAL` está definido.
 
 ## Runtime local
 
@@ -22,6 +23,11 @@ Terminal de una sola ventana orientada a agentes, apps y logs, con splits, cabec
 - 2026-10-22 · Sin `freezePrototype`: con él la UI no arranca (`Attempted to assign to readonly property`, en dev y en release).
 - 2026-10-22 · Los layouts por proyecto (pendiente) no ejecutarán comandos de un repo sin confianza explícita por carpeta, como `direnv allow`.
 - 2026-10-22 · CSS propio en lugar de Tailwind: la UI es una sola pantalla con pocos estilos.
+- 2026-10-22 · Tema oscuro propio con acentos `#00b7d5` y `#00ca91`; el botón de la barra superior alterna el orden del acento y conserva la preferencia en `localStorage`.
+- 2026-10-22 · La barra superior se redujo a 44 px para mantener contexto, split y cambio de acento sin competir con los terminales.
+- 2026-10-22 · El cierre de una cabecera reutiliza la acción de cerrar split; el último split abre una confirmación con opción explícita de guardar o descartar la restauración.
+- 2026-10-22 · Las sesiones se guardan como `zylo.session.v1` en `localStorage` con validación, límite de 32 panes y sin procesos ni scrollback; se restaura layout, metadatos y cwd.
+- 2026-10-22 · La opción macOS `Nueva ventana` se implementa en AppKit porque Tauri 2 no expone un builder de menú del Dock.
 - 2026-10-22 · Sin E2E: el runner E2E del stack apunta a navegador, no a la ventana Tauri; la UI se verifica a mano y su lógica con pruebas unitarias.
 
 ## Decisiones de versiones

@@ -4938,6 +4938,9 @@ name = "zylo"
 version = "0.1.0"
 dependencies = [
  "gethostname",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-foundation",
  "portable-pty",
  "serde",
  "tauri",

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createPinia, setActivePinia } from 'pinia';
 import { paneIds } from './layout-tree.ts';
 import { createLayoutStore } from './layout.store.ts';
+import { createSessionSnapshot } from '../session/session.ts';
 
 let counter = 0;
 const nextId = () => `id${++counter}`;
@@ -44,6 +45,17 @@ test('rename trims and empty name clears it', () => {
   assert.equal(store.panes[first]?.name, undefined);
 });
 
+test('tracks and clears the command currently controlling a pane', () => {
+  const store = createLayoutStore(nextId)();
+  store.init('/');
+  const [first] = paneIds(store.root);
+  assert.ok(first);
+  store.setCommand(first, 'codex');
+  assert.equal(store.panes[first]?.command, 'codex');
+  store.setCommand(first, null);
+  assert.equal(store.panes[first]?.command, undefined);
+});
+
 test('startRename marks the pane and rename finishes it', () => {
   const store = createLayoutStore(nextId)();
   store.init('/');
@@ -65,4 +77,27 @@ test('close removes the pane, focuses a remaining one and reports when none are 
   assert.equal(store.panes[second], undefined);
   assert.equal(store.activeId, first);
   assert.equal(store.close(first), false);
+});
+
+test('restores a layout and keeps future pane ids unique', () => {
+  const store = createLayoutStore(nextId)();
+  store.init('/home/me');
+  const [first] = paneIds(store.root);
+  assert.ok(first);
+  const second = store.split(first, 'row');
+  store.rename(second, 'API');
+  store.setCwd(second, '/home/me/api');
+  const snapshot = createSessionSnapshot(store.root, store.panes, second);
+
+  const restored = createLayoutStore(nextId)();
+  assert.equal(restored.restore(snapshot), true);
+  assert.deepEqual(paneIds(restored.root), [first, second]);
+  assert.equal(restored.activeId, second);
+  assert.equal(restored.panes[second]?.cwd, '/home/me/api');
+  assert.equal(restored.panes[second]?.name, 'API');
+
+  const third = restored.split(second, 'column');
+  assert.notEqual(third, first);
+  assert.notEqual(third, second);
+  assert.equal(restored.panes[third]?.cwd, '/home/me/api');
 });

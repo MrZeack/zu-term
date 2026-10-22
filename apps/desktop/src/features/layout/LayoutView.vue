@@ -71,11 +71,13 @@ function openMenu(paneId: string) {
     >
       <PaneHeader
         :title="paneTitle(store.panes[id] ?? {})"
+        :command="store.panes[id]?.command"
         :path="shortPath(store.panes[id]?.cwd, props.home, PATH_MAX)"
         :active="store.activeId === id"
         :renaming="store.renamingId === id"
         @start-rename="store.startRename(id)"
         @rename="(name) => store.rename(id, name)"
+        @close="emit('exit', id)"
       />
       <TerminalPane
         :pane-id="id"
@@ -84,6 +86,7 @@ function openMenu(paneId: string) {
         :local-host="props.localHost"
         @cwd="(path) => store.setCwd(id, path)"
         @title="(title) => store.setTitle(id, title)"
+        @command="(command) => store.setCommand(id, command)"
         @focus="store.focus(id)"
         @exit="emit('exit', id)"
         @paste="(text) => emit('paste', id, text)"
@@ -111,7 +114,7 @@ function openMenu(paneId: string) {
   position: absolute;
   display: flex;
   flex-direction: column;
-  padding: 2px;
+  padding: 4px;
   min-width: 0;
   min-height: 0;
 }
@@ -119,6 +122,7 @@ function openMenu(paneId: string) {
 .pane > * {
   border-left: 1px solid var(--border);
   border-right: 1px solid var(--border);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.12);
 }
 
 .pane > :last-child {
@@ -128,6 +132,12 @@ function openMenu(paneId: string) {
 .divider {
   position: absolute;
   z-index: 1;
+  border-radius: 999px;
+  background: var(--border-strong);
+  opacity: 0.7;
+  transition:
+    background 140ms ease,
+    opacity 140ms ease;
 }
 
 .divider.row {
@@ -143,7 +153,7 @@ function openMenu(paneId: string) {
 }
 
 .divider:hover {
-  background: var(--accent);
-  opacity: 0.4;
+  background: linear-gradient(var(--accent), var(--accent-alt));
+  opacity: 1;
 }
 </style>

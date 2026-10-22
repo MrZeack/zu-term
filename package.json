@@ -12,7 +12,7 @@
     "lint": "eslint . --max-warnings=0 && prettier --check .",
     "lint:fix": "eslint . --fix && prettier --write .",
     "build": "pnpm -r build",
-    "check": "pnpm run lint && pnpm run typecheck && pnpm run test"
+    "check": "pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

@@ -1,9 +1,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { paneTitle, shortPath } from './pane-title.ts';
+import { paneTitle, paneTitleWithCommand, shortPath } from './pane-title.ts';
 
 test('paneTitle prefers the custom name', () => {
   assert.equal(paneTitle({ name: 'agente', terminalTitle: 'vim', cwd: '/x/api' }), 'agente');
+});
+
+test('paneTitleWithCommand includes the active command before the current title', () => {
+  assert.equal(
+    paneTitleWithCommand({ command: 'codex', name: 'agente', terminalTitle: 'vim', cwd: '/x/api' }),
+    'codex · agente',
+  );
+  assert.equal(paneTitleWithCommand({ command: 'claude', cwd: '/x/api' }), 'claude · api');
 });
 
 test('paneTitle falls back to terminal title, cwd folder, then shell', () => {

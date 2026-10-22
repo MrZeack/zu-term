@@ -10,7 +10,7 @@ Terminal de escritorio para trabajar con agentes, apps y logs en una sola ventan
 | ------------------------ | ---------------------------------------------------------------- |
 | `apps/desktop/src`       | UI en Vue 3 + xterm.js, por feature (`src/features/*`)           |
 | `apps/desktop/src-tauri` | Tauri 2 en Rust: PTY por split (`src/pty`), permisos y bundle    |
-| `shell/osc7.zsh`         | integración zsh: informa la carpeta actual a la terminal         |
+| `shell/osc7.zsh`         | integración zsh: informa cwd y comando activo a la terminal      |
 | `scripts/`               | arranque/parada en segundo plano y prueba de operación           |
 | `docs/`                  | [arquitectura](docs/ARCHITECTURE.md) y guías de buenas prácticas |
 
@@ -29,7 +29,7 @@ make logs     # log en vivo
 make down     # detiene todo lo iniciado
 ```
 
-Otros: `make check` (lint, tipos y pruebas), `make test`, `make bundle` (solo genera `.app/.dmg` o `.deb/.AppImage`).
+Otros: `make check` (lint, tipos, pruebas, cobertura, build y auditoría), `make test`, `make bundle` (solo genera `.app/.dmg` o `.deb/.AppImage`).
 
 ## Instalar
 
@@ -55,18 +55,39 @@ make uninstall-app   # la desinstala
 | Redimensionar        | —             | —                | arrastrar el borde                       |
 
 - El split nuevo abre en la carpeta del split de origen; cerrar el último cierra la ventana.
-- Título: el nombre asignado, si no el título que fija el programa (OSC 0/2), si no la carpeta actual.
+- La barra superior incluye botones para dividir a la derecha o hacia abajo; ambos actúan sobre el split activo.
+- Cada cabecera tiene un botón `×` para cerrar directamente ese split. Si es el último, Zylo pide confirmación antes de cerrar la ventana.
+- La cabecera muestra el comando activo (`codex`, `claude`, etc.), el nombre asignado o el título que fija el programa y la carpeta actual.
+- El botón `ACENTO` alterna rápidamente entre los temas Cian (`#00b7d5`) y Menta (`#00ca91`); la elección se conserva localmente.
+- En macOS, el menú contextual del icono de Zylo en el Dock incluye `Nueva ventana`.
+
+### Sesiones
+
+Al cerrar una ventana, Zylo pregunta si debe guardar la sesión. `Cerrar y restaurar sesión` conserva el árbol de splits, proporciones, nombres, títulos y última carpeta de cada shell; al próximo arranque las terminales se crean de nuevo en esas carpetas. `Cerrar sin restaurar` elimina ese punto de restauración.
+
+No se guardan procesos activos, comandos en ejecución ni scrollback: una PTY nueva no puede reanudar esos estados de forma segura.
 
 ### Integración zsh
 
-Sin ella, la ruta de la cabecera no se actualiza y los splits nuevos abren en la carpeta inicial (necesaria si la shell corre tras un wrapper como `kiro-cli-term`). En `~/.zshrc`, antes de bloques que deban ir al final:
+Sin ella, la ruta de la cabecera no se actualiza, el comando activo no aparece y los splits nuevos abren en la carpeta inicial (necesaria si la shell corre tras un wrapper como `kiro-cli-term`). En `~/.zshrc`, antes de bloques que deban ir al final:
 
 ```zsh
-[[ -n "$ZYLO_TERMINAL" && -f "$HOME/personal/console/shell/osc7.zsh" ]] && source "$HOME/personal/console/shell/osc7.zsh"
+if [[ -n "$ZYLO_TERMINAL" && -f "$HOME/personal/zylo/shell/osc7.zsh" ]]; then
+  source "$HOME/personal/zylo/shell/osc7.zsh"
+fi
 ```
+
+Después reinicia Zylo o ejecuta `source ~/.zshrc` en cada split abierto. Comprueba que `echo "$ZYLO_TERMINAL"` muestra `1`, ejecuta `pwd`, cambia con `cd /tmp` y usa uno de los botones de split: el nuevo split debe iniciar en `/tmp`.
 
 ## Seguridad
 
-- La UI solo tiene permisos de menú, cerrar su ventana y portapapeles de texto ([capabilities](apps/desktop/src-tauri/capabilities/default.json)); CSP sin orígenes externos.
+- La UI solo tiene permisos de menú, cerrar sus ventanas, diálogo de confirmación y portapapeles de texto ([capabilities](apps/desktop/src-tauri/capabilities/default.json)); CSP sin orígenes externos.
 - El backend valida tamaño de terminal, tamaño de escritura (≤ 1 MiB) y carpeta inicial (absoluta y existente; si no, `$HOME`).
-- Dependencias con versión exacta y `minimumReleaseAge` de 2 días.
+- Dependencias JavaScript con versión exacta, lockfiles versionados y `minimumReleaseAge` de 2 días.
+
+## Limitaciones conocidas
+
+- La validación de la ventana Tauri (menú, portapapeles, diálogo, renombrado y redimensionado) sigue requiriendo una comprobación manual.
+- Linux se comprueba en CI mediante el bundle, pero aún no tiene validación interactiva de la ventana.
+- La aplicación no está firmada ni notarizada para distribución externa.
+- El menú del Dock y la restauración de sesión requieren validación manual en una ventana Tauri real; la cobertura automatizada prueba la lógica y la validación de datos.

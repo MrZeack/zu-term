@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseOsc7 } from './osc.ts';
+import { parseOsc7, parseZyloCommand } from './osc.ts';
 
 const HOST = 'mac.local';
 
@@ -15,10 +15,31 @@ test('parseOsc7 compares the host case-insensitively', () => {
   assert.equal(parseOsc7('file://MAC.LOCAL/tmp', HOST), '/tmp');
 });
 
+test('parseOsc7 accepts the local hostname with or without the macOS .local suffix', () => {
+  assert.equal(parseOsc7('file://mac.local/tmp', 'mac'), '/tmp');
+  assert.equal(parseOsc7('file://mac/tmp', 'mac.local'), '/tmp');
+});
+
+test('parseOsc7 does not trust a different hostname with the same suffix', () => {
+  assert.equal(parseOsc7('file://other.local/tmp', 'mac'), null);
+});
+
 test('parseOsc7 rejects paths reported for another, empty or localhost host', () => {
   assert.equal(parseOsc7('file://evil.example/tmp', HOST), null);
   assert.equal(parseOsc7('file:///tmp', HOST), null);
   assert.equal(parseOsc7('file://localhost/tmp', HOST), null);
+});
+
+test('parseZyloCommand reads safe command labels and clears them', () => {
+  assert.equal(parseZyloCommand('ZyloCommand=codex'), 'codex');
+  assert.equal(parseZyloCommand('ZyloCommand=claude-code'), 'claude-code');
+  assert.equal(parseZyloCommand('ZyloCommand='), null);
+});
+
+test('parseZyloCommand ignores malformed or unrelated payloads', () => {
+  assert.equal(parseZyloCommand('OtherCommand=codex'), undefined);
+  assert.equal(parseZyloCommand('ZyloCommand=codex%20--danger'), null);
+  assert.equal(parseZyloCommand('ZyloCommand=codex\u001b'), null);
 });
 
 test('parseOsc7 rejects everything while the local host is unknown', () => {
