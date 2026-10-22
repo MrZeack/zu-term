@@ -1,0 +1,25 @@
+:root {
+  --bg: #15171c;
+  --pane-bg: #1b1e25;
+  --header-bg: #20242c;
+  --border: #2c313b;
+  --accent: #50dc8c;
+  --text: #e6e8ee;
+  --muted: #8a92a3;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Ubuntu, sans-serif;
+  overflow: hidden;
+}

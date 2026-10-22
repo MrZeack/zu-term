@@ -1,0 +1,9 @@
+packages:
+  - apps/*
+
+# Only these packages may run install scripts.
+allowBuilds:
+  esbuild: true
+
+# Versions must be public for 2 days before install (supply-chain safety).
+minimumReleaseAge: 2880

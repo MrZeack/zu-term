@@ -1,0 +1,14 @@
+node_modules/
+dist/
+target/
+apps/desktop/src-tauri/gen/
+.run/
+logs/
+*.pid
+*.log
+.env
+.env.*
+!.env.example
+coverage/
+.handoff.md
+.DS_Store
