@@ -7,7 +7,7 @@ export PATH := $(NODE_BIN_DIR):/opt/homebrew/opt/node@24/bin:/opt/homebrew/opt/r
 
 TAURI_DIR := apps/desktop/src-tauri
 
-.PHONY: env deps install uninstall up down restart logs status test lint typecheck audit build check bundle
+.PHONY: env deps icons install uninstall up down restart logs status test lint typecheck audit build check bundle
 
 env: ## Check tools, Node version and .env
 	@set -e; \
@@ -26,7 +26,10 @@ env: ## Check tools, Node version and .env
 deps: env ## Install JS dependencies from the lockfile
 	@pnpm install --frozen-lockfile
 
-install: deps ## Build in release and install into the OS app launcher
+icons: env ## Generate platform icons from the project icon
+	@cd apps/desktop && pnpm tauri icon ../../icon.png --output src-tauri/icons
+
+install: deps icons ## Build in release and install into the OS app launcher
 	@scripts/install-app.sh install
 
 uninstall: ## Remove the installed app (only if it is Zu Term)
@@ -70,5 +73,5 @@ build: deps ## Build the frontend bundle
 
 check: deps lint typecheck test audit build ## Everything above
 
-bundle: deps ## Build the installable app (.app/.dmg on macOS, .deb/.AppImage on Linux)
+bundle: deps icons ## Build the installable app (.app/.dmg on macOS, .deb/.AppImage on Linux)
 	@cd apps/desktop && pnpm tauri build

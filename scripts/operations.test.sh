@@ -14,6 +14,44 @@ done
 grep -qE '^deps:' Makefile || fail "falta el target interno 'deps'"
 grep -q 'scripts/install-app.sh install' Makefile || fail "install no instala la aplicación"
 grep -q 'scripts/install-app.sh uninstall' Makefile || fail "uninstall no elimina la aplicación"
+grep -qE '^icons:' Makefile || fail "falta el target de generación de iconos"
+grep -qE '^install: deps icons( |$)' Makefile || fail "install no prepara los iconos del bundle"
+grep -qF 'pnpm tauri icon ../../icon.png --output src-tauri/icons' Makefile \
+  || fail "el build no genera los iconos Tauri desde icon.png"
+grep -qE '^  build appimage$' scripts/install-app.sh \
+  || fail "el instalador Linux no construye solo el AppImage"
+if grep -qE '^  build deb,appimage$' scripts/install-app.sh; then
+  fail "el instalador Linux empaqueta deb y AppImage juntos"
+fi
+[[ -f icon.png ]] || fail "falta el icono de Fedora en la raíz del proyecto"
+grep -qF 'install -Dm644 "$ROOT_DIR/apps/desktop/src-tauri/icons/128x128.png" "$LINUX_ICON"' \
+  scripts/install-app.sh || fail "make install no instala el icono generado para Fedora"
+grep -qF '"enableGTKAppId": true' apps/desktop/src-tauri/tauri.conf.json \
+  || fail "Tauri no registra el identificador GTK para GNOME/Wayland"
+grep -qF 'LINUX_DESKTOP="$HOME/.local/share/applications/$IDENTIFIER.desktop"' \
+  scripts/install-app.sh || fail "el launcher no usa el identificador GTK como nombre desktop"
+grep -qF 'StartupWMClass=$IDENTIFIER' scripts/install-app.sh \
+  || fail "la entrada de Fedora no identifica la ventana del dock"
+grep -qF 'LEGACY_LINUX_DESKTOP="$HOME/.local/share/applications/zu-term.desktop"' \
+  scripts/install-app.sh || fail "el instalador no migra el launcher anterior"
+grep -qF 'gsettings get org.gnome.shell favorite-apps' scripts/install-app.sh \
+  || fail "el instalador no revisa el favorito antiguo de GNOME"
+grep -qF 'gsettings set org.gnome.shell favorite-apps' scripts/install-app.sh \
+  || fail "el instalador no migra el favorito antiguo de GNOME"
+if grep -qF 'update-desktop-database "$(dirname "$LINUX_DESKTOP")" || true' scripts/install-app.sh; then
+  fail "el instalador oculta errores al actualizar la base de escritorios"
+fi
+grep -qF 'gtk-update-icon-cache --force --ignore-theme-index --include-image-data' scripts/install-app.sh \
+  || fail "make install no actualiza el cache del icono"
+[[ -f scripts/nautilus/zu_term.py ]] || fail "falta la extensión de Nautilus"
+[[ -f scripts/nautilus/zu_term_paths.py ]] || fail "falta el helper de rutas de Nautilus"
+[[ -f scripts/nautilus/zu_term.test.py ]] || fail "falta la prueba del menú de Nautilus"
+grep -qF 'scripts/nautilus/zu_term.py' scripts/install-app.sh \
+  || fail "make install no instala la extensión de Nautilus"
+grep -qF 'scripts/nautilus/zu_term_paths.py' scripts/install-app.sh \
+  || fail "make install no instala el helper de Nautilus"
+grep -qF -- '--working-directory' scripts/nautilus/zu_term.py \
+  || fail "Nautilus no transmite la carpeta al terminal"
 if grep -qE '^(install-app|uninstall-app):' Makefile; then
   fail "siguen expuestos los targets install-app/uninstall-app"
 fi
@@ -39,6 +77,8 @@ fi
 for script in scripts/*.sh; do
   bash -n "$script" || fail "sintaxis en $script"
 done
+python3 scripts/nautilus/zu_term_paths.test.py
+python3 scripts/nautilus/zu_term.test.py
 git check-ignore -q .env 2>/dev/null || grep -qxF '.env' .gitignore || fail ".env no ignorado"
 
 echo "operations OK"

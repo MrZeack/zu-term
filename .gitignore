@@ -1,7 +1,9 @@
 node_modules/
+__pycache__/
 dist/
 target/
 apps/desktop/src-tauri/gen/
+apps/desktop/src-tauri/icons/
 .run/
 logs/
 *.pid
