@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# Builds Zylo in release mode and installs it where the OS app launcher finds it.
+# Builds Zu Term in release mode and installs it where the OS app launcher finds it.
 # Usage: install-app.sh install|uninstall
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP_NAME="Zylo"
-IDENTIFIER="fyi.voza.zylo"
+APP_NAME="Zu Term"
+IDENTIFIER="fyi.voza.zuterm"
 BUNDLE_DIR="$ROOT_DIR/apps/desktop/src-tauri/target/release/bundle"
 
 MAC_TARGET="/Applications/$APP_NAME.app"
-LINUX_BIN="$HOME/.local/bin/zylo"
-LINUX_DESKTOP="$HOME/.local/share/applications/zylo.desktop"
-LINUX_ICON="$HOME/.local/share/icons/hicolor/128x128/apps/zylo.png"
+LINUX_BIN="$HOME/.local/bin/zu-term"
+LINUX_DESKTOP="$HOME/.local/share/applications/zu-term.desktop"
+LINUX_ICON="$HOME/.local/share/icons/hicolor/128x128/apps/zu-term.png"
 
 build() {
   cd "$ROOT_DIR/apps/desktop"
@@ -52,7 +52,7 @@ linux_install() {
   local appimage
   appimage="$(find "$BUNDLE_DIR/appimage" -maxdepth 1 -name '*.AppImage' | head -1)"
   [[ -n "$appimage" ]] || { echo "No se generó el AppImage" >&2; exit 1; }
-  if [[ -e "$LINUX_DESKTOP" ]] && ! grep -qxF "X-Zylo-Id=$IDENTIFIER" "$LINUX_DESKTOP"; then
+  if [[ -e "$LINUX_DESKTOP" ]] && ! grep -qxF "X-Zu-Term-Id=$IDENTIFIER" "$LINUX_DESKTOP"; then
     echo "$LINUX_DESKTOP existe y no es de $APP_NAME; no se toca" >&2
     exit 1
   fi
@@ -65,17 +65,17 @@ Type=Application
 Name=$APP_NAME
 Comment=Terminal con splits para agentes, apps y logs
 Exec=$LINUX_BIN
-Icon=zylo
+Icon=zu-term
 Terminal=false
 Categories=System;TerminalEmulator;
-X-Zylo-Id=$IDENTIFIER
+X-Zu-Term-Id=$IDENTIFIER
 EOF
   command -v update-desktop-database >/dev/null && update-desktop-database "$(dirname "$LINUX_DESKTOP")" || true
   echo "Instalada: $LINUX_BIN (menú de aplicaciones: $APP_NAME)"
 }
 
 linux_uninstall() {
-  if [[ -e "$LINUX_DESKTOP" ]] && ! grep -qxF "X-Zylo-Id=$IDENTIFIER" "$LINUX_DESKTOP"; then
+  if [[ -e "$LINUX_DESKTOP" ]] && ! grep -qxF "X-Zu-Term-Id=$IDENTIFIER" "$LINUX_DESKTOP"; then
     echo "$LINUX_DESKTOP no es de $APP_NAME; no se toca" >&2
     exit 1
   fi

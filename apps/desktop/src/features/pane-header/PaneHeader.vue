@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { nextTick, ref, useTemplateRef, watch } from 'vue';
+import { UI_DENSITY } from '../../core/ui-density.ts';
 
 const props = defineProps<{
   title: string;
@@ -16,6 +17,11 @@ const emit = defineEmits<{
 
 const draft = ref('');
 const input = useTemplateRef<HTMLInputElement>('input');
+const densityStyle = {
+  '--pane-header-height': `${UI_DENSITY.paneHeaderHeight}px`,
+  '--pane-title-font-size': `${UI_DENSITY.paneTitleFontSize}px`,
+  '--pane-meta-font-size': `${UI_DENSITY.paneMetaFontSize}px`,
+};
 
 watch(
   () => props.renaming,
@@ -31,7 +37,12 @@ const commit = () => emit('rename', draft.value);
 </script>
 
 <template>
-  <header class="pane-header" :class="{ active }" @dblclick="emit('startRename')">
+  <header
+    class="pane-header"
+    :class="{ active }"
+    :style="densityStyle"
+    @dblclick="emit('startRename')"
+  >
     <input
       v-if="renaming"
       ref="input"
@@ -68,9 +79,9 @@ const commit = () => emit('rename', draft.value);
   position: relative;
   display: flex;
   align-items: center;
-  gap: 14px;
-  min-height: 42px;
-  padding: 7px 12px 8px;
+  gap: 8px;
+  min-height: var(--pane-header-height);
+  padding: 4px 8px 5px;
   background: var(--header-bg);
   border-bottom: 1px solid var(--border);
   user-select: none;
@@ -96,7 +107,7 @@ const commit = () => emit('rename', draft.value);
 .title,
 .title-input {
   margin: 0;
-  font-size: 15px;
+  font-size: var(--pane-title-font-size);
   font-weight: 750;
   white-space: nowrap;
   overflow: hidden;
@@ -116,16 +127,16 @@ const commit = () => emit('rename', draft.value);
 .command-badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   flex: 0 0 auto;
   max-width: 42%;
-  padding: 4px 8px;
+  padding: 3px 6px;
   border: 1px solid var(--accent-alt-border);
   border-radius: 999px;
   color: var(--accent-alt);
   background: var(--accent-alt-soft);
   font-family: Menlo, monospace;
-  font-size: 11px;
+  font-size: var(--pane-meta-font-size);
   font-weight: 700;
   letter-spacing: 0.01em;
   overflow: hidden;
@@ -134,12 +145,12 @@ const commit = () => emit('rename', draft.value);
 }
 
 .command-dot {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   flex: 0 0 auto;
   border-radius: 50%;
   background: var(--accent-alt);
-  box-shadow: 0 0 0 3px var(--accent-alt-soft);
+  box-shadow: 0 0 0 2px var(--accent-alt-soft);
 }
 
 .title-input {
@@ -155,7 +166,7 @@ const commit = () => emit('rename', draft.value);
 .path {
   flex: 1;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--pane-meta-font-size);
   font-family: Menlo, monospace;
   white-space: nowrap;
   overflow: hidden;
@@ -170,8 +181,8 @@ const commit = () => emit('rename', draft.value);
   display: inline-grid;
   flex: 0 0 auto;
   place-items: center;
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   padding: 0;
   border: 1px solid transparent;
   border-radius: 6px;
@@ -179,7 +190,7 @@ const commit = () => emit('rename', draft.value);
   background: transparent;
   cursor: pointer;
   font: inherit;
-  font-size: 18px;
+  font-size: 15px;
   line-height: 1;
   transition:
     border-color 140ms ease,

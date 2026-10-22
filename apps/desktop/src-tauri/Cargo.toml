@@ -1,11 +1,11 @@
 [package]
-name = "zylo"
+name = "zu-term"
 version = "0.1.0"
 edition = "2024"
 publish = false
 
 [lib]
-name = "zylo_lib"
+name = "zu_term_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

@@ -1,6 +1,6 @@
-# Zylo
+# Zu Term
 
-Terminal de escritorio para trabajar con agentes, apps y logs en una sola ventana: splits anidados, cabecera grande con nombre y ruta por split y menú contextual nativo. macOS y Linux.
+Terminal de escritorio para trabajar con agentes, apps y logs en una sola ventana: splits anidados, cabecera compacta con nombre y ruta por split y menú contextual nativo. macOS y Linux.
 
 **Estado:** MVP. Verificado en macOS con pruebas unitarias y arranque real; Linux sin probar.
 
@@ -34,13 +34,13 @@ Otros: `make check` (lint, tipos, pruebas, cobertura, build y auditoría), `make
 ## Instalar
 
 ```bash
-make install-app     # compila en release e instala Zylo
+make install-app     # compila en release e instala Zu Term
 make uninstall-app   # la desinstala
 ```
 
-- macOS: copia `Zylo.app` a `/Applications` (aparece en Launchpad y Spotlight). El `.dmg` queda en `apps/desktop/src-tauri/target/release/bundle/dmg/` para instalar en otro Mac.
-- Linux: instala el AppImage en `~/.local/bin/zylo` con su entrada en el menú de aplicaciones (`~/.local/share/applications/zylo.desktop`).
-- Solo reemplaza una instalación previa si su identificador es `fyi.voza.zylo`. La app no está firmada: en otro Mac, la primera vez ábrela con clic derecho → Abrir.
+- macOS: copia `Zu Term.app` a `/Applications` (aparece en Launchpad y Spotlight). El `.dmg` queda en `apps/desktop/src-tauri/target/release/bundle/dmg/` para instalar en otro Mac.
+- Linux: instala el AppImage en `~/.local/bin/zu-term` con su entrada en el menú de aplicaciones (`~/.local/share/applications/zu-term.desktop`).
+- Solo reemplaza una instalación previa si su identificador es `fyi.voza.zuterm`. La app no está firmada: en otro Mac, la primera vez ábrela con clic derecho → Abrir.
 
 ## Uso
 
@@ -56,14 +56,14 @@ make uninstall-app   # la desinstala
 
 - El split nuevo abre en la carpeta del split de origen; cerrar el último cierra la ventana.
 - La barra superior incluye botones para dividir a la derecha o hacia abajo; ambos actúan sobre el split activo.
-- Cada cabecera tiene un botón `×` para cerrar directamente ese split. Si es el último, Zylo pide confirmación antes de cerrar la ventana.
+- Cada cabecera tiene un botón `×` para cerrar directamente ese split. Si es el último, Zu Term pide confirmación antes de cerrar la ventana.
 - La cabecera muestra el comando activo (`codex`, `claude`, etc.), el nombre asignado o el título que fija el programa y la carpeta actual.
 - El botón `ACENTO` alterna rápidamente entre los temas Cian (`#00b7d5`) y Menta (`#00ca91`); la elección se conserva localmente.
-- En macOS, el menú contextual del icono de Zylo en el Dock incluye `Nueva ventana`.
+- En macOS, el menú contextual del icono de Zu Term en el Dock incluye `Nueva ventana`.
 
 ### Sesiones
 
-Al cerrar una ventana, Zylo pregunta si debe guardar la sesión. `Cerrar y restaurar sesión` conserva el árbol de splits, proporciones, nombres, títulos y última carpeta de cada shell; al próximo arranque las terminales se crean de nuevo en esas carpetas. `Cerrar sin restaurar` elimina ese punto de restauración.
+Al cerrar una ventana, Zu Term pregunta si debe guardar la sesión. `Cerrar y restaurar sesión` conserva el árbol de splits, proporciones, nombres, títulos y última carpeta de cada shell; al próximo arranque las terminales se crean de nuevo en esas carpetas. `Cerrar sin restaurar` elimina ese punto de restauración.
 
 No se guardan procesos activos, comandos en ejecución ni scrollback: una PTY nueva no puede reanudar esos estados de forma segura.
 
@@ -72,12 +72,12 @@ No se guardan procesos activos, comandos en ejecución ni scrollback: una PTY nu
 Sin ella, la ruta de la cabecera no se actualiza, el comando activo no aparece y los splits nuevos abren en la carpeta inicial (necesaria si la shell corre tras un wrapper como `kiro-cli-term`). En `~/.zshrc`, antes de bloques que deban ir al final:
 
 ```zsh
-if [[ -n "$ZYLO_TERMINAL" && -f "$HOME/personal/zylo/shell/osc7.zsh" ]]; then
-  source "$HOME/personal/zylo/shell/osc7.zsh"
+if [[ -n "$ZU_TERM_TERMINAL" && -f "$HOME/personal/zu-term/shell/osc7.zsh" ]]; then
+  source "$HOME/personal/zu-term/shell/osc7.zsh"
 fi
 ```
 
-Después reinicia Zylo o ejecuta `source ~/.zshrc` en cada split abierto. Comprueba que `echo "$ZYLO_TERMINAL"` muestra `1`, ejecuta `pwd`, cambia con `cd /tmp` y usa uno de los botones de split: el nuevo split debe iniciar en `/tmp`.
+Después reinicia Zu Term o ejecuta `source ~/.zshrc` en cada split abierto. Comprueba que `echo "$ZU_TERM_TERMINAL"` muestra `1`, ejecuta `pwd`, cambia con `cd /tmp` y usa uno de los botones de split: el nuevo split debe iniciar en `/tmp`.
 
 ## Seguridad
 

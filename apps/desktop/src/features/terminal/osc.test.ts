@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseOsc7, parseZyloCommand } from './osc.ts';
+import { parseOsc7, parseZuTermCommand } from './osc.ts';
 
 const HOST = 'mac.local';
 
@@ -30,16 +30,16 @@ test('parseOsc7 rejects paths reported for another, empty or localhost host', ()
   assert.equal(parseOsc7('file://localhost/tmp', HOST), null);
 });
 
-test('parseZyloCommand reads safe command labels and clears them', () => {
-  assert.equal(parseZyloCommand('ZyloCommand=codex'), 'codex');
-  assert.equal(parseZyloCommand('ZyloCommand=claude-code'), 'claude-code');
-  assert.equal(parseZyloCommand('ZyloCommand='), null);
+test('parseZuTermCommand reads safe command labels and clears them', () => {
+  assert.equal(parseZuTermCommand('ZuTermCommand=codex'), 'codex');
+  assert.equal(parseZuTermCommand('ZuTermCommand=claude-code'), 'claude-code');
+  assert.equal(parseZuTermCommand('ZuTermCommand='), null);
 });
 
-test('parseZyloCommand ignores malformed or unrelated payloads', () => {
-  assert.equal(parseZyloCommand('OtherCommand=codex'), undefined);
-  assert.equal(parseZyloCommand('ZyloCommand=codex%20--danger'), null);
-  assert.equal(parseZyloCommand('ZyloCommand=codex\u001b'), null);
+test('parseZuTermCommand ignores malformed or unrelated payloads', () => {
+  assert.equal(parseZuTermCommand('OtherCommand=codex'), undefined);
+  assert.equal(parseZuTermCommand('ZuTermCommand=codex%20--danger'), null);
+  assert.equal(parseZuTermCommand('ZuTermCommand=codex\u001b'), null);
 });
 
 test('parseOsc7 rejects everything while the local host is unknown', () => {

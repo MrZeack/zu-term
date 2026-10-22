@@ -22,7 +22,7 @@ grep -q 'aria-label="Cerrar split"' apps/desktop/src/features/pane-header/PaneHe
   || fail "la cabecera no ofrece cerrar split"
 grep -q 'Cerrar y restaurar sesión' apps/desktop/src/App.vue \
   || fail "falta la opción de restaurar sesión al cerrar"
-grep -Fq 'zylo-window-*' apps/desktop/src-tauri/capabilities/default.json \
+grep -Fq 'zu-term-window-*' apps/desktop/src-tauri/capabilities/default.json \
   || fail "las ventanas nuevas no tienen capability"
 if grep -nE '\b(pkill|killall|fuser -k)\b|lsof -ti' Makefile scripts/*.sh | grep -v 'operations.test.sh'; then
   fail "comandos globales de terminación"

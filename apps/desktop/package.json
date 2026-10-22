@@ -1,5 +1,5 @@
 {
-  "name": "@console/desktop",
+  "name": "@zu-term/desktop",
   "private": true,
   "type": "module",
   "scripts": {

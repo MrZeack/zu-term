@@ -3,7 +3,8 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal } from '@xterm/xterm';
 import { onBeforeUnmount, onMounted, useTemplateRef, watch } from 'vue';
-import { parseOsc7, parseZyloCommand } from './osc.ts';
+import { UI_DENSITY } from '../../core/ui-density.ts';
+import { parseOsc7, parseZuTermCommand } from './osc.ts';
 import { ptyClient } from './pty-client.ts';
 import { terminals } from './terminal-registry.ts';
 import { THEME_CHANGE_EVENT, loadTheme, terminalTheme, type ThemeName } from '../theme/theme.ts';
@@ -27,7 +28,7 @@ const host = useTemplateRef<HTMLDivElement>('host');
 const initialTheme = loadTheme(window.localStorage);
 const term = new Terminal({
   fontFamily: 'Menlo, "DejaVu Sans Mono", "Liberation Mono", monospace',
-  fontSize: 13,
+  fontSize: UI_DENSITY.terminalFontSize,
   cursorBlink: true,
   scrollback: 100_000,
   theme: terminalTheme(initialTheme),
@@ -64,7 +65,7 @@ onMounted(async () => {
     return true;
   });
   term.parser.registerOscHandler(1337, (payload) => {
-    const command = parseZyloCommand(payload);
+    const command = parseZuTermCommand(payload);
     if (command === undefined) return false;
     emit('command', command);
     return true;

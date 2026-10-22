@@ -36,13 +36,13 @@ mod macos {
             return;
         };
         let number = NEXT_WINDOW.fetch_add(1, Ordering::Relaxed);
-        let label = format!("zylo-window-{number}");
+        let label = format!("zu-term-window-{number}");
         let result = tauri::WebviewWindowBuilder::new(
             app,
             label,
             tauri::WebviewUrl::App("index.html".into()),
         )
-        .title("Zylo")
+        .title("Zu Term")
         .inner_size(1280.0, 800.0)
         .min_inner_size(480.0, 320.0)
         .build();
@@ -69,7 +69,7 @@ mod macos {
             NSMenuItem::initWithTitle_action_keyEquivalent(
                 NSMenuItem::alloc(mtm),
                 ns_string!("Nueva ventana"),
-                Some(sel!(zyloOpenNewWindow:)),
+                Some(sel!(zuTermOpenNewWindow:)),
                 ns_string!(""),
             )
         };
@@ -99,7 +99,7 @@ mod macos {
             );
             class_addMethod(
                 class,
-                sel!(zyloOpenNewWindow:),
+                sel!(zuTermOpenNewWindow:),
                 new_window_imp,
                 MENU_ACTION_TYPES.as_ptr().cast(),
             );

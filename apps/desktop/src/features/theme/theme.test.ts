@@ -7,9 +7,9 @@ function storage(values: Record<string, string>): Pick<Storage, 'getItem'> {
 }
 
 test('loadTheme accepts only the two supported accent themes', () => {
-  assert.equal(loadTheme(storage({ 'zylo.theme': 'mint' })), 'mint');
-  assert.equal(loadTheme(storage({ 'zylo.theme': 'cyan' })), 'cyan');
-  assert.equal(loadTheme(storage({ 'zylo.theme': 'light' })), 'cyan');
+  assert.equal(loadTheme(storage({ 'zu-term.theme': 'mint' })), 'mint');
+  assert.equal(loadTheme(storage({ 'zu-term.theme': 'cyan' })), 'cyan');
+  assert.equal(loadTheme(storage({ 'zu-term.theme': 'light' })), 'cyan');
   assert.equal(loadTheme(storage({})), 'cyan');
 });
 

@@ -5,6 +5,8 @@ import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { ask } from '@tauri-apps/plugin-dialog';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useLayoutStore } from './core/app-stores.ts';
+import { APP_NAME } from './core/brand.ts';
+import { UI_DENSITY } from './core/ui-density.ts';
 import { paneMenuItems } from './features/context-menu/menu-items.ts';
 import { showPaneMenu } from './features/context-menu/pane-menu.ts';
 import LayoutView from './features/layout/LayoutView.vue';
@@ -39,6 +41,10 @@ const activePane = computed(() => store.panes[store.activeId]);
 const activePaneTitle = computed(() => paneTitleWithCommand(activePane.value ?? {}));
 const activePanePath = computed(() => shortPath(activePane.value?.cwd, home.value, 44));
 const themeLabel = computed(() => (theme.value === 'cyan' ? 'Cian' : 'Menta'));
+const densityStyle = {
+  '--toolbar-height': `${UI_DENSITY.toolbarHeight}px`,
+  '--toolbar-font-size': `${UI_DENSITY.toolbarFontSize}px`,
+};
 let allowWindowClose = false;
 let unlistenClose: (() => void) | undefined;
 
@@ -137,11 +143,11 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main class="app-shell">
-    <header class="app-toolbar" aria-label="Barra de herramientas de Zylo">
-      <div class="brand" aria-label="Zylo">
+  <main class="app-shell" :style="densityStyle">
+    <header class="app-toolbar" :aria-label="`Barra de herramientas de ${APP_NAME}`">
+      <div class="brand" :aria-label="APP_NAME">
         <span class="brand-mark" aria-hidden="true"><i /><i /></span>
-        <span class="brand-name">Zylo</span>
+        <span class="brand-name">{{ APP_NAME }}</span>
       </div>
       <span class="toolbar-divider" aria-hidden="true" />
       <div v-if="ready" class="active-context" aria-live="polite">
@@ -203,7 +209,7 @@ onBeforeUnmount(() => {
         aria-labelledby="close-dialog-title"
         aria-describedby="close-dialog-description"
       >
-        <span class="dialog-kicker">SALIR DE ZYLO</span>
+        <span class="dialog-kicker">SALIR DE {{ APP_NAME.toUpperCase() }}</span>
         <h2 id="close-dialog-title">¿Cerrar la aplicación?</h2>
         <p id="close-dialog-description">
           Puedes guardar la distribución actual y volver a abrir tus terminales en sus últimas
@@ -240,19 +246,21 @@ onBeforeUnmount(() => {
 .app-toolbar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex: 0 0 44px;
-  padding: 0 14px;
+  gap: 8px;
+  flex: 0 0 var(--toolbar-height);
+  min-height: var(--toolbar-height);
+  padding: 0 10px;
   background: var(--toolbar-bg);
   border-bottom: 1px solid var(--border);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
   user-select: none;
+  font-size: var(--toolbar-font-size);
 }
 
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   flex: 0 0 auto;
 }
 
@@ -261,9 +269,9 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  width: 20px;
-  height: 20px;
-  padding: 3px;
+  width: 18px;
+  height: 18px;
+  padding: 2px;
   border: 1px solid var(--accent-border);
   border-radius: 6px;
   background: linear-gradient(145deg, var(--accent-soft), var(--accent-alt-soft));
@@ -272,61 +280,61 @@ onBeforeUnmount(() => {
 
 .brand-mark i {
   display: block;
-  width: 5px;
-  height: 12px;
+  width: 4px;
+  height: 11px;
   border-radius: 4px;
   background: var(--accent);
 }
 
 .brand-mark i:last-child {
-  height: 8px;
-  margin-top: 3px;
+  height: 7px;
+  margin-top: 2px;
   background: var(--accent-alt);
 }
 
 .brand-name {
   color: var(--text);
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.02em;
 }
 
 .toolbar-divider {
   width: 1px;
-  height: 18px;
+  height: 16px;
   background: var(--border);
 }
 
 .active-context {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 7px;
   min-width: 0;
   color: var(--muted);
 }
 
 .context-kicker {
   color: var(--accent);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.12em;
 }
 
 .context-title {
-  max-width: 220px;
+  max-width: 200px;
   overflow: hidden;
   color: var(--text);
-  font-size: 13px;
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .context-path {
-  max-width: 260px;
+  max-width: 220px;
   overflow: hidden;
   color: var(--muted);
   font-family: Menlo, monospace;
-  font-size: 11px;
+  font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -337,14 +345,14 @@ onBeforeUnmount(() => {
 
 .toolbar-actions {
   display: inline-flex;
-  gap: 6px;
+  gap: 5px;
 }
 
 .toolbar-action {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 5px 8px;
+  gap: 5px;
+  padding: 4px 6px;
   border: 1px solid var(--border-strong);
   border-radius: 9px;
   color: var(--muted);
@@ -371,7 +379,7 @@ onBeforeUnmount(() => {
 }
 
 .toolbar-action__label {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
 }
 
@@ -408,8 +416,8 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  min-width: 104px;
-  padding: 5px 8px;
+  min-width: 92px;
+  padding: 4px 6px;
   border: 1px solid var(--border-strong);
   border-radius: 9px;
   color: var(--text);
@@ -440,14 +448,14 @@ onBeforeUnmount(() => {
 }
 
 .theme-swatch i {
-  width: 7px;
-  height: 15px;
+  width: 6px;
+  height: 13px;
   border-radius: 5px;
   background: var(--accent);
 }
 
 .theme-swatch i:last-child {
-  margin-top: 4px;
+  margin-top: 3px;
   background: var(--accent-alt);
 }
 
@@ -460,13 +468,13 @@ onBeforeUnmount(() => {
 
 .theme-copy small {
   color: var(--muted);
-  font-size: 8px;
+  font-size: 7px;
   font-weight: 800;
   letter-spacing: 0.11em;
 }
 
 .theme-copy strong {
-  font-size: 12px;
+  font-size: 10px;
 }
 
 .theme-switch {
@@ -569,7 +577,7 @@ onBeforeUnmount(() => {
 
 @media (max-width: 680px) {
   .app-toolbar {
-    padding: 0 12px;
+    padding: 0 8px;
   }
 
   .toolbar-divider,
@@ -582,7 +590,7 @@ onBeforeUnmount(() => {
   }
 
   .toolbar-action {
-    padding: 8px;
+    padding: 6px;
   }
 }
 </style>

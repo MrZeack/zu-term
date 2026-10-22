@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Zylo",
+  "productName": "Zu Term",
   "version": "0.1.0",
-  "identifier": "fyi.voza.zylo",
+  "identifier": "fyi.voza.zuterm",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://127.0.0.1:17601",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Zylo",
+        "title": "Zu Term",
         "width": 1280,
         "height": 800,
         "minWidth": 480,

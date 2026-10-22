@@ -1,7 +1,8 @@
+import { APP_SLUG } from '../../core/brand.ts';
 import { paneIds, type LayoutNode } from '../layout/layout-tree.ts';
 import type { PaneState } from '../layout/layout.store.ts';
 
-export const SESSION_STORAGE_KEY = 'zylo.session.v1';
+export const SESSION_STORAGE_KEY = `${APP_SLUG}.session.v1`;
 
 const MAX_PANES = 32;
 const MAX_ID_LENGTH = 96;

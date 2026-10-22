@@ -62,5 +62,5 @@ bundle: install ## Build the installable app (.app/.dmg on macOS, .deb/.AppImage
 install-app: install ## Build in release and install into the OS app launcher
 	@scripts/install-app.sh install
 
-uninstall-app: ## Remove the installed app (only if it is Zylo)
+uninstall-app: ## Remove the installed app (only if it is Zu Term)
 	@scripts/install-app.sh uninstall

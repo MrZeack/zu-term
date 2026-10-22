@@ -1,5 +1,7 @@
-export const THEME_STORAGE_KEY = 'zylo.theme';
-export const THEME_CHANGE_EVENT = 'zylo-theme-change';
+import { APP_SLUG } from '../../core/brand.ts';
+
+export const THEME_STORAGE_KEY = `${APP_SLUG}.theme`;
+export const THEME_CHANGE_EVENT = `${APP_SLUG}-theme-change`;
 
 export type ThemeName = 'cyan' | 'mint';
 
