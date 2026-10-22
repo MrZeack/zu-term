@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { FitAddon } from '@xterm/addon-fit';
-import { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal } from '@xterm/xterm';
 import { onBeforeUnmount, onMounted, useTemplateRef, watch } from 'vue';
 import { UI_DENSITY } from '../../core/ui-density.ts';
 import { parseOsc7, parseZuTermCommand } from './osc.ts';
 import { ptyClient } from './pty-client.ts';
 import { terminals } from './terminal-registry.ts';
+import { deferUntilNextFrame } from './webgl-startup.ts';
 import { THEME_CHANGE_EVENT, loadTheme, terminalTheme, type ThemeName } from '../theme/theme.ts';
 
 const props = defineProps<{
@@ -52,12 +52,24 @@ function updateTerminalTheme(event?: Event) {
 onMounted(async () => {
   if (!host.value) return;
   term.open(host.value);
-  try {
-    term.loadAddon(new WebglAddon());
-  } catch {
-    // WebGL unavailable: xterm keeps its DOM renderer.
-  }
   fit.fit();
+  deferUntilNextFrame(
+    () => {
+      void import('@xterm/addon-webgl')
+        .then(({ WebglAddon }) => {
+          if (unmounted) return;
+          try {
+            term.loadAddon(new WebglAddon());
+          } catch {
+            // WebGL unavailable: xterm keeps its DOM renderer.
+          }
+        })
+        .catch(() => {
+          // Loading the optional renderer must never delay the terminal.
+        });
+    },
+    (callback) => window.requestAnimationFrame(callback),
+  );
 
   term.parser.registerOscHandler(7, (payload) => {
     const path = parseOsc7(payload, props.localHost);
