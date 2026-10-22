@@ -3,6 +3,8 @@ name: CI
 on:
   push:
   pull_request:
+  release:
+    types: [published]
 
 permissions:
   contents: read
@@ -48,6 +50,7 @@ jobs:
 
   linux-bundle:
     name: Linux bundle
+    if: github.event_name == 'release' || (github.event_name == 'push' && github.ref_type == 'tag')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:

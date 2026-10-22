@@ -67,6 +67,10 @@ grep -q '"check": "pnpm run lint && pnpm run typecheck && pnpm run test && pnpm 
 [[ -f .github/workflows/ci.yml ]] || fail "falta el workflow de CI"
 grep -q 'pnpm install --frozen-lockfile' .github/workflows/ci.yml || fail "CI no congela el lockfile"
 grep -Eq 'pnpm run build|make check' .github/workflows/ci.yml || fail "CI no ejecuta el build"
+grep -qE '^  release:$' .github/workflows/ci.yml || fail "CI no escucha releases publicados"
+grep -qF 'types: [published]' .github/workflows/ci.yml || fail "CI no limita releases a publicados"
+grep -qF "if: github.event_name == 'release' || (github.event_name == 'push' && github.ref_type == 'tag')" \
+  .github/workflows/ci.yml || fail "el bundle se ejecuta fuera de tags y releases"
 grep -q 'aria-label="Cerrar split"' apps/desktop/src/features/pane-header/PaneHeader.vue \
   || fail "la cabecera no ofrece cerrar split"
 grep -q 'Cerrar y restaurar sesión' apps/desktop/src/App.vue \
