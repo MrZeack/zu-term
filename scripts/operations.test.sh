@@ -26,18 +26,20 @@ fi
 [[ -f icon.png ]] || fail "falta el icono de Fedora en la raíz del proyecto"
 grep -qF 'install -Dm644 "$ROOT_DIR/apps/desktop/src-tauri/icons/128x128.png" "$LINUX_ICON"' \
   scripts/install-app.sh || fail "make install no instala el icono generado para Fedora"
-grep -qF '"enableGTKAppId": true' apps/desktop/src-tauri/tauri.conf.json \
-  || fail "Tauri no registra el identificador GTK para GNOME/Wayland"
-grep -qF 'LINUX_DESKTOP="$HOME/.local/share/applications/$IDENTIFIER.desktop"' \
-  scripts/install-app.sh || fail "el launcher no usa el identificador GTK como nombre desktop"
-grep -qF 'StartupWMClass=$IDENTIFIER' scripts/install-app.sh \
+grep -qF '"enableGTKAppId": false' apps/desktop/src-tauri/tauri.conf.json \
+  || fail "Tauri registra una instancia GTK única y bloquea ventanas independientes"
+grep -qE '^LINUX_DESKTOP="\$HOME/\.local/share/applications/zu-term\.desktop"$' \
+  scripts/install-app.sh || fail "el launcher no coincide con el app_id de la ventana"
+grep -qF 'StartupWMClass=zu-term' scripts/install-app.sh \
   || fail "la entrada de Fedora no identifica la ventana del dock"
-grep -qF 'LEGACY_LINUX_DESKTOP="$HOME/.local/share/applications/zu-term.desktop"' \
+grep -qE '^LEGACY_LINUX_DESKTOP="\$HOME/\.local/share/applications/\$IDENTIFIER\.desktop"$' \
   scripts/install-app.sh || fail "el instalador no migra el launcher anterior"
 grep -qF 'gsettings get org.gnome.shell favorite-apps' scripts/install-app.sh \
-  || fail "el instalador no revisa el favorito antiguo de GNOME"
+  || fail "el instalador no revisa el favorito anterior de GNOME"
 grep -qF 'gsettings set org.gnome.shell favorite-apps' scripts/install-app.sh \
-  || fail "el instalador no migra el favorito antiguo de GNOME"
+  || fail "el instalador no migra el favorito anterior de GNOME"
+grep -qF 'echo "Favorito de GNOME migrado a zu-term.desktop"' scripts/install-app.sh \
+  || fail "el instalador anuncia un destino incorrecto para el favorito"
 if grep -qF 'update-desktop-database "$(dirname "$LINUX_DESKTOP")" || true' scripts/install-app.sh; then
   fail "el instalador oculta errores al actualizar la base de escritorios"
 fi

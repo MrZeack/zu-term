@@ -10,8 +10,8 @@ BUNDLE_DIR="$ROOT_DIR/apps/desktop/src-tauri/target/release/bundle"
 
 MAC_TARGET="/Applications/$APP_NAME.app"
 LINUX_BIN="$HOME/.local/bin/zu-term"
-LINUX_DESKTOP="$HOME/.local/share/applications/$IDENTIFIER.desktop"
-LEGACY_LINUX_DESKTOP="$HOME/.local/share/applications/zu-term.desktop"
+LINUX_DESKTOP="$HOME/.local/share/applications/zu-term.desktop"
+LEGACY_LINUX_DESKTOP="$HOME/.local/share/applications/$IDENTIFIER.desktop"
 LINUX_ICON_THEME="$HOME/.local/share/icons/hicolor"
 LINUX_ICON="$LINUX_ICON_THEME/128x128/apps/zu-term.png"
 NAUTILUS_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
@@ -106,10 +106,10 @@ migrate_gnome_favorite() {
   command -v gsettings >/dev/null || return 0
   local favorites migrated
   favorites="$(gsettings get org.gnome.shell favorite-apps 2>/dev/null)" || return 0
-  [[ "$favorites" == *"'zu-term.desktop'"* ]] || return 0
-  migrated="${favorites//\'zu-term.desktop\'/\'$IDENTIFIER.desktop\'}"
+  [[ "$favorites" == *"'$IDENTIFIER.desktop'"* ]] || return 0
+  migrated="${favorites//\'$IDENTIFIER.desktop\'/\'zu-term.desktop\'}"
   if gsettings set org.gnome.shell favorite-apps "$migrated" >/dev/null 2>&1; then
-    echo "Favorito de GNOME migrado a $IDENTIFIER.desktop"
+    echo "Favorito de GNOME migrado a zu-term.desktop"
   else
     echo "Aviso: no se pudo migrar el favorito de GNOME; vuelve a fijar Zu Term" >&2
   fi
@@ -139,7 +139,7 @@ Exec=$LINUX_BIN
 Icon=zu-term
 Terminal=false
 Categories=System;TerminalEmulator;
-StartupWMClass=$IDENTIFIER
+StartupWMClass=zu-term
 X-Zu-Term-Id=$IDENTIFIER
 EOF
   rm -f "$LEGACY_LINUX_DESKTOP"

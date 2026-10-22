@@ -10,7 +10,7 @@
     "beforeBuildCommand": "pnpm build"
   },
   "app": {
-    "enableGTKAppId": true,
+    "enableGTKAppId": false,
     "windows": [
       {
         "label": "main",
