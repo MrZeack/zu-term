@@ -157,7 +157,6 @@ onBeforeUnmount(() => {
   <main class="app-shell" :style="densityStyle">
     <header class="app-toolbar" :aria-label="`Barra de herramientas de ${APP_NAME}`">
       <div class="brand" :aria-label="APP_NAME">
-        <span class="brand-mark" aria-hidden="true"><i /><i /></span>
         <span class="brand-name">{{ APP_NAME }}</span>
       </div>
       <span class="toolbar-divider" aria-hidden="true" />
@@ -273,34 +272,6 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 6px;
   flex: 0 0 auto;
-}
-
-.brand-mark {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  width: 18px;
-  height: 18px;
-  padding: 2px;
-  border: 1px solid var(--accent-border);
-  border-radius: 6px;
-  background: linear-gradient(145deg, var(--accent-soft), var(--accent-alt-soft));
-  transform: skewX(-10deg);
-}
-
-.brand-mark i {
-  display: block;
-  width: 4px;
-  height: 11px;
-  border-radius: 4px;
-  background: var(--accent);
-}
-
-.brand-mark i:last-child {
-  height: 7px;
-  margin-top: 2px;
-  background: var(--accent-alt);
 }
 
 .brand-name {
