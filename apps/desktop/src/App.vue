@@ -9,12 +9,13 @@ import { APP_NAME } from './core/brand.ts';
 import { UI_DENSITY } from './core/ui-density.ts';
 import { paneMenuItems } from './features/context-menu/menu-items.ts';
 import { showPaneMenu } from './features/context-menu/pane-menu.ts';
+import type { ContextMenuPosition } from './features/context-menu/position.ts';
 import LayoutView from './features/layout/LayoutView.vue';
 import { createPaneActions } from './features/pane-actions/pane-actions.ts';
 import { paneTitleWithCommand, shortPath } from './features/pane-header/pane-title.ts';
 import { clearSession, loadSession, saveSession } from './features/session/session.ts';
 import { shortcutAction } from './features/shortcuts/shortcuts.ts';
-import { localHostname } from './features/terminal/pty-client.ts';
+import { initialCwd, localHostname } from './features/terminal/pty-client.ts';
 import { terminals } from './features/terminal/terminal-registry.ts';
 import {
   splitToolbarActions,
@@ -72,11 +73,15 @@ function onKeydown(event: KeyboardEvent) {
   actions.run(action, store.activeId).catch(report);
 }
 
-function openMenu(paneId: string) {
+function openMenu(paneId: string, position: ContextMenuPosition) {
   const hasSelection = Boolean(terminals.get(paneId)?.getSelection());
-  showPaneMenu(paneMenuItems({ hasSelection }), (action) => {
-    actions.run(action, paneId).catch(report);
-  }).catch(report);
+  showPaneMenu(
+    paneMenuItems({ hasSelection }),
+    (action) => {
+      actions.run(action, paneId).catch(report);
+    },
+    position,
+  ).catch(report);
 }
 
 function setTheme(next: ThemeName) {
@@ -126,10 +131,16 @@ onMounted(async () => {
     report(error);
   }
   try {
-    [home.value, localHost.value] = await Promise.all([homeDir(), localHostname()]);
-    const savedSession = loadSession(window.localStorage);
+    const [homePath, hostname, launchCwd] = await Promise.all([
+      homeDir(),
+      localHostname(),
+      initialCwd(),
+    ]);
+    home.value = homePath;
+    localHost.value = hostname;
+    const savedSession = launchCwd ? null : loadSession(window.localStorage);
     if (savedSession) store.restore(savedSession);
-    store.init(home.value);
+    store.init(launchCwd ?? homePath);
   } catch (error) {
     report(error);
   }

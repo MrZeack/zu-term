@@ -6,11 +6,12 @@ import { useLayoutStore } from '../../core/app-stores.ts';
 import PaneHeader from '../pane-header/PaneHeader.vue';
 import { paneTitle, shortPath } from '../pane-header/pane-title.ts';
 import TerminalPane from '../terminal/TerminalPane.vue';
+import { contextMenuPosition, type ContextMenuPosition } from '../context-menu/position.ts';
 import { computeGeometry, ratioAt, type Divider, type Rect } from './layout-geometry.ts';
 
 const props = defineProps<{ home: string | undefined; localHost: string | undefined }>();
 const emit = defineEmits<{
-  menu: [paneId: string];
+  menu: [paneId: string, position: ContextMenuPosition];
   exit: [paneId: string];
   paste: [paneId: string, text: string];
 }>();
@@ -52,9 +53,9 @@ function startDrag(divider: Divider, down: PointerEvent) {
   target.addEventListener('pointerup', stop);
 }
 
-function openMenu(paneId: string) {
+function openMenu(paneId: string, event: MouseEvent) {
   store.focus(paneId);
-  emit('menu', paneId);
+  emit('menu', paneId, contextMenuPosition(event));
 }
 </script>
 
@@ -67,7 +68,7 @@ function openMenu(paneId: string) {
       :class="{ active: store.activeId === id }"
       :style="paneStyle(rect)"
       @mousedown="store.focus(id)"
-      @contextmenu.prevent="openMenu(id)"
+      @contextmenu.prevent="openMenu(id, $event)"
     >
       <PaneHeader
         :title="paneTitle(store.panes[id] ?? {})"

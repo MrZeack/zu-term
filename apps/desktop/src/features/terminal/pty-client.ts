@@ -15,3 +15,4 @@ export const ptyClient = {
 };
 
 export const localHostname = () => invoke<string>('local_hostname');
+export const initialCwd = () => invoke<string | null>('initial_cwd');

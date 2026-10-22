@@ -13,6 +13,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             host::local_hostname,
+            host::initial_cwd,
             pty::commands::pty_spawn,
             pty::commands::pty_write,
             pty::commands::pty_resize,
