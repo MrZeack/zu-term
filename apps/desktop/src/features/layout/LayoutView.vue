@@ -8,8 +8,12 @@ import { paneTitle, shortPath } from '../pane-header/pane-title.ts';
 import TerminalPane from '../terminal/TerminalPane.vue';
 import { computeGeometry, ratioAt, type Divider, type Rect } from './layout-geometry.ts';
 
-const props = defineProps<{ home: string | undefined }>();
-const emit = defineEmits<{ menu: [paneId: string]; exit: [paneId: string] }>();
+const props = defineProps<{ home: string | undefined; localHost: string | undefined }>();
+const emit = defineEmits<{
+  menu: [paneId: string];
+  exit: [paneId: string];
+  paste: [paneId: string, text: string];
+}>();
 
 const PATH_MAX = 60;
 const store = useLayoutStore();
@@ -77,10 +81,12 @@ function openMenu(paneId: string) {
         :pane-id="id"
         :start-cwd="store.panes[id]?.startCwd"
         :active="store.activeId === id && store.renamingId !== id"
+        :local-host="props.localHost"
         @cwd="(path) => store.setCwd(id, path)"
         @title="(title) => store.setTitle(id, title)"
         @focus="store.focus(id)"
         @exit="emit('exit', id)"
+        @paste="(text) => emit('paste', id, text)"
       />
     </section>
     <div

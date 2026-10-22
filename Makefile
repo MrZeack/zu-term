@@ -5,7 +5,7 @@ export PATH := /opt/homebrew/opt/node@24/bin:/opt/homebrew/opt/rustup/bin:$(HOME
 
 TAURI_DIR := apps/desktop/src-tauri
 
-.PHONY: env install up down restart logs status test lint typecheck check bundle \
+.PHONY: env install up down restart logs status test lint typecheck audit check bundle \
 	install-app uninstall-app
 
 env: ## Check tools, Node version and .env
@@ -46,7 +46,12 @@ lint: env ## ESLint + Prettier + rustfmt + clippy
 typecheck: env
 	@pnpm run typecheck
 
-check: lint typecheck test ## Everything above
+audit: env ## Known vulnerabilities in npm packages and Rust crates
+	@pnpm audit --audit-level low
+	@command -v cargo-audit >/dev/null || { echo "Falta cargo-audit (brew install cargo-audit o cargo install cargo-audit --locked)" >&2; exit 1; }
+	@cd $(TAURI_DIR) && cargo audit --deny warnings
+
+check: lint typecheck test audit ## Everything above
 
 bundle: install ## Build the installable app (.app/.dmg on macOS, .deb/.AppImage on Linux)
 	@cd apps/desktop && pnpm tauri build

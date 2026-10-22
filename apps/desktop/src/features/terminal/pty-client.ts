@@ -13,3 +13,5 @@ export const ptyClient = {
     invoke<void>('pty_resize', { id, cols, rows }),
   kill: (id: number) => invoke<void>('pty_kill', { id }),
 };
+
+export const localHostname = () => invoke<string>('local_hostname');

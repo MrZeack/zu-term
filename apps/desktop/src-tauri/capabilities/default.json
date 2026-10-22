@@ -1,12 +1,14 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Main window: native menus, closing itself and plain-text clipboard only.",
+  "description": "Main window: only what the UI calls (home dir, context menu, close, confirm dialog, text clipboard).",
   "windows": ["main"],
   "permissions": [
-    "core:default",
-    "core:menu:default",
+    "core:path:allow-resolve-directory",
+    "core:menu:allow-new",
+    "core:menu:allow-popup",
     "core:window:allow-close",
+    "dialog:allow-message",
     "clipboard-manager:allow-read-text",
     "clipboard-manager:allow-write-text"
   ]

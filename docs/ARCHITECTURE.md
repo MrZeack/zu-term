@@ -18,6 +18,9 @@ Terminal de una sola ventana orientada a agentes, apps y logs, con splits, cabec
 
 - 2026-10-22 · Tauri 2 + xterm.js en lugar de WezTerm o Ghostty: menú contextual nativo y cabecera por split, ninguno de los dos lo ofrecía completo.
 - 2026-10-22 · Nombre Zylo e identificador `fyi.voza.zylo` (dominio voza.fyi); `make install-app` instala en `/Applications` o en el menú de aplicaciones de Linux, sin firma de código.
+- 2026-10-22 · Endurecimiento: el texto pegado (menú, atajo o `CMD+V`) pasa por `paste-guard` (sin caracteres de control; confirmación si hay varias líneas); OSC 7 solo se acepta con el hostname local; el capability concede solo los comandos que la UI invoca; `make check` incluye `pnpm audit` y `cargo audit` (excepciones justificadas en `src-tauri/.cargo/audit.toml`).
+- 2026-10-22 · Sin `freezePrototype`: con él la UI no arranca (`Attempted to assign to readonly property`, en dev y en release).
+- 2026-10-22 · Los layouts por proyecto (pendiente) no ejecutarán comandos de un repo sin confianza explícita por carpeta, como `direnv allow`.
 - 2026-10-22 · CSS propio en lugar de Tailwind: la UI es una sola pantalla con pocos estilos.
 - 2026-10-22 · Sin E2E: el runner E2E del stack apunta a navegador, no a la ventana Tauri; la UI se verifica a mano y su lógica con pruebas unitarias.
 

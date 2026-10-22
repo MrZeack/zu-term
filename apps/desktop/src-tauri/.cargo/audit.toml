@@ -1,0 +1,8 @@
+# Only warnings that come transitively from Tauri's Linux GTK stack
+# (tauri → muda/tao → gtk 0.18) and have no fix until Tauri moves to GTK 4.
+# Review on every Tauri upgrade; anything else still fails `make audit`.
+[advisories]
+ignore = [
+  "RUSTSEC-2024-0370", # proc-macro-error unmaintained (build-time macro of gtk 0.18)
+  "RUSTSEC-2024-0429", # glib VariantStrIter unsound; not used by this app
+]

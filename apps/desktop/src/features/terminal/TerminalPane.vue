@@ -7,8 +7,19 @@ import { parseOsc7 } from './osc.ts';
 import { ptyClient } from './pty-client.ts';
 import { terminals } from './terminal-registry.ts';
 
-const props = defineProps<{ paneId: string; startCwd: string | undefined; active: boolean }>();
-const emit = defineEmits<{ cwd: [path: string]; title: [title: string]; exit: []; focus: [] }>();
+const props = defineProps<{
+  paneId: string;
+  startCwd: string | undefined;
+  active: boolean;
+  localHost: string | undefined;
+}>();
+const emit = defineEmits<{
+  cwd: [path: string];
+  title: [title: string];
+  exit: [];
+  focus: [];
+  paste: [text: string];
+}>();
 
 const host = useTemplateRef<HTMLDivElement>('host');
 const term = new Terminal({
@@ -38,7 +49,7 @@ onMounted(async () => {
   fit.fit();
 
   term.parser.registerOscHandler(7, (payload) => {
-    const path = parseOsc7(payload);
+    const path = parseOsc7(payload, props.localHost);
     if (path) emit('cwd', path);
     return true;
   });
@@ -50,6 +61,17 @@ onMounted(async () => {
     if (ptyId !== undefined) ptyClient.resize(ptyId, cols, rows).catch(report);
   });
   term.textarea?.addEventListener('focus', () => emit('focus'));
+  // Native paste (CMD+V / Edit menu) must go through the paste guard, not
+  // straight into xterm: intercept it before xterm's own listener.
+  host.value.addEventListener(
+    'paste',
+    (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      emit('paste', event.clipboardData?.getData('text/plain') ?? '');
+    },
+    true,
+  );
 
   terminals.register(props.paneId, {
     getSelection: () => term.getSelection(),
