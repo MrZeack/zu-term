@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createPinia, setActivePinia } from 'pinia';
 import { paneIds } from './layout-tree.ts';
 import { createLayoutStore } from './layout.store.ts';
-import { createSessionSnapshot } from '../session/session.ts';
+import { createWorkspaceSnapshot } from '../workspace/workspace.ts';
 
 let counter = 0;
 const nextId = () => `id${++counter}`;
@@ -34,6 +34,54 @@ test('split opens the new pane in the cwd of the source pane and focuses it', ()
   assert.deepEqual(paneIds(store.root), [first, created]);
 });
 
+test('asigna un historial separado por pane y lo conserva al restaurar', () => {
+  const store = createLayoutStore(nextId)();
+  store.init('/home/me');
+  const [first] = paneIds(store.root);
+  assert.ok(first);
+  const firstHistoryId = store.panes[first]?.historyId;
+  assert.ok(firstHistoryId);
+  const second = store.split(first, 'row');
+  const secondHistoryId = store.panes[second]?.historyId;
+  assert.ok(secondHistoryId);
+  assert.notEqual(firstHistoryId, secondHistoryId);
+
+  const restored = createLayoutStore(nextId)();
+  assert.equal(restored.restore(store.snapshot()), true);
+  assert.equal(restored.panes[first]?.historyId, firstHistoryId);
+  assert.equal(restored.panes[second]?.historyId, secondHistoryId);
+});
+
+test('move reorganiza el grupo completo, cambia la orientación y enfoca el pane movido', () => {
+  const store = createLayoutStore(nextId)();
+  store.init('/home/me');
+  const [first] = paneIds(store.root);
+  assert.ok(first);
+  const second = store.split(first, 'row');
+  const third = store.split(second, 'column');
+
+  assert.equal(store.move(first, third, 'bottom'), true);
+  assert.deepEqual(paneIds(store.root), [second, third, first]);
+  assert.equal(store.activeId, first);
+  assert.equal(store.root.kind === 'split' && store.root.direction, 'column');
+  assert.equal(
+    store.root.kind === 'split' && store.root.first.kind === 'split' && store.root.first.direction,
+    'column',
+  );
+});
+
+test('move intercambia dos posiciones al soltar en el centro del destino', () => {
+  const store = createLayoutStore(nextId)();
+  store.init('/home/me');
+  const [first] = paneIds(store.root);
+  assert.ok(first);
+  const second = store.split(first, 'row');
+
+  assert.equal(store.move(first, second, 'center'), true);
+  assert.deepEqual(paneIds(store.root), [second, first]);
+  assert.equal(store.activeId, first);
+});
+
 test('rename trims and empty name clears it', () => {
   const store = createLayoutStore(nextId)();
   store.init('/');
@@ -54,6 +102,21 @@ test('tracks and clears the command currently controlling a pane', () => {
   assert.equal(store.panes[first]?.command, 'codex');
   store.setCommand(first, null);
   assert.equal(store.panes[first]?.command, undefined);
+});
+
+test('tracks agent resume metadata independently from the transient command', () => {
+  const store = createLayoutStore(nextId)();
+  store.init('/');
+  const [first] = paneIds(store.root);
+  assert.ok(first);
+  store.setAgent(first, { provider: 'codex', sessionId: 'session-1' });
+  store.setCommand(first, 'codex');
+  store.setCommand(first, null);
+  assert.deepEqual(store.panes[first]?.agent, { provider: 'codex', sessionId: 'session-1' });
+  store.setAgent(first, { provider: 'codex' });
+  assert.deepEqual(store.panes[first]?.agent, { provider: 'codex' });
+  store.setAgent(first, null);
+  assert.equal(store.panes[first]?.agent, undefined);
 });
 
 test('startRename marks the pane and rename finishes it', () => {
@@ -87,7 +150,7 @@ test('restores a layout and keeps future pane ids unique', () => {
   const second = store.split(first, 'row');
   store.rename(second, 'API');
   store.setCwd(second, '/home/me/api');
-  const snapshot = createSessionSnapshot(store.root, store.panes, second);
+  const snapshot = createWorkspaceSnapshot(store.root, store.panes, second);
 
   const restored = createLayoutStore(nextId)();
   assert.equal(restored.restore(snapshot), true);

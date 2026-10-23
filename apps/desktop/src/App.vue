@@ -5,16 +5,19 @@ import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { ask } from '@tauri-apps/plugin-dialog';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useLayoutStore } from './core/app-stores.ts';
-import { APP_NAME } from './core/brand.ts';
+import { APP_NAME, APP_VERSION } from './core/brand.ts';
 import { UI_DENSITY } from './core/ui-density.ts';
+import { configClient } from './features/config/config-client.ts';
+import { createConfigFile, parseConfigFile } from './features/config/config.ts';
 import { paneMenuItems } from './features/context-menu/menu-items.ts';
 import { showPaneMenu } from './features/context-menu/pane-menu.ts';
 import type { ContextMenuPosition } from './features/context-menu/position.ts';
 import LayoutView from './features/layout/LayoutView.vue';
 import { createPaneActions } from './features/pane-actions/pane-actions.ts';
-import { paneTitleWithCommand, shortPath } from './features/pane-header/pane-title.ts';
-import { clearSession, loadSession, saveSession } from './features/session/session.ts';
+import { paneTitle, shortPath } from './features/pane-header/pane-title.ts';
 import { shortcutAction } from './features/shortcuts/shortcuts.ts';
+import StatusBar from './features/status/StatusBar.vue';
+import type { StatusPane } from './features/status/status.ts';
 import { initialCwd, localHostname } from './features/terminal/pty-client.ts';
 import { terminals } from './features/terminal/terminal-registry.ts';
 import {
@@ -25,9 +28,22 @@ import {
   THEME_CHANGE_EVENT,
   loadTheme,
   nextTheme,
-  persistTheme,
   type ThemeName,
 } from './features/theme/theme.ts';
+import WorkspaceMenu from './features/workspace/WorkspaceMenu.vue';
+import WorkspaceNameDialog from './features/workspace/WorkspaceNameDialog.vue';
+import {
+  createWorkspaceCatalog,
+  createWorkspaceId,
+  createWorkspaceRecord,
+  deleteWorkspace as removeWorkspace,
+  findWorkspace,
+  loadWorkspaceCatalog,
+  MAX_WORKSPACES,
+  setActiveWorkspace,
+  upsertWorkspace,
+  type WorkspaceCatalog,
+} from './features/workspace/workspace.ts';
 
 const store = useLayoutStore();
 const appWindow = getCurrentWindow();
@@ -36,12 +52,40 @@ const localHost = ref<string>();
 const ready = ref(false);
 const theme = ref<ThemeName>('cyan');
 const closePromptVisible = ref(false);
+const workspaceCatalog = ref<WorkspaceCatalog>(createWorkspaceCatalog());
+const workspaceDialogVisible = ref(false);
+const workspaceDialogMode = ref<'new' | 'save'>('new');
+const workspaceError = ref<string>();
+const layoutRevision = ref(0);
+const terminalSizes = ref<Record<string, { cols: number; rows: number }>>({});
 const isMac = navigator.userAgent.includes('Mac');
 const splitActions = splitToolbarActions(isMac);
-const activePane = computed(() => store.panes[store.activeId]);
-const activePaneTitle = computed(() => paneTitleWithCommand(activePane.value ?? {}));
-const activePanePath = computed(() => shortPath(activePane.value?.cwd, home.value, 44));
 const themeLabel = computed(() => (theme.value === 'cyan' ? 'Cian' : 'Menta'));
+const paneCount = computed(() => Object.keys(store.panes).length);
+const activeWorkspaceName = computed(
+  () => findWorkspace(workspaceCatalog.value, workspaceCatalog.value.activeId)?.name,
+);
+const statusPane = computed<StatusPane | undefined>(() => {
+  const pane = store.panes[store.activeId];
+  if (!pane) return undefined;
+  const size = terminalSizes.value[store.activeId];
+  return {
+    title: paneTitle(pane),
+    path: shortPath(pane.cwd, home.value, 160),
+    ...(pane.cwd ? { fullPath: pane.cwd } : {}),
+    ...(pane.command ? { command: pane.command } : {}),
+    ...(pane.agent ? { agent: pane.agent } : {}),
+    ...(size ? { cols: size.cols, rows: size.rows } : {}),
+  };
+});
+const workspaceDialogTitle = computed(() =>
+  workspaceDialogMode.value === 'new' ? 'Nuevo workspace' : 'Guardar workspace',
+);
+const workspaceDialogDescription = computed(() =>
+  workspaceDialogMode.value === 'new'
+    ? 'Crea un espacio para guardar esta distribución y sus agentes.'
+    : 'Asigna un nombre al workspace actual para poder restaurarlo después.',
+);
 const densityStyle = {
   '--toolbar-height': `${UI_DENSITY.toolbarHeight}px`,
   '--toolbar-font-size': `${UI_DENSITY.toolbarFontSize}px`,
@@ -84,19 +128,135 @@ function openMenu(paneId: string, position: ContextMenuPosition) {
   ).catch(report);
 }
 
-function setTheme(next: ThemeName) {
+async function persistConfig(catalog: WorkspaceCatalog, nextTheme: ThemeName): Promise<boolean> {
+  try {
+    await configClient.write(JSON.stringify(createConfigFile(nextTheme, catalog)));
+    return true;
+  } catch (error) {
+    workspaceError.value = 'No se pudo guardar la configuración en ~/.config/zu-term.';
+    report(error);
+    return false;
+  }
+}
+
+async function setTheme(next: ThemeName) {
   theme.value = next;
   document.documentElement.dataset.theme = next;
-  persistTheme(window.localStorage, next);
+  await persistConfig(workspaceCatalog.value, next);
   window.dispatchEvent(new CustomEvent<ThemeName>(THEME_CHANGE_EVENT, { detail: next }));
 }
 
 function toggleTheme() {
-  setTheme(nextTheme(theme.value));
+  void setTheme(nextTheme(theme.value));
 }
 
 function runToolbarAction(action: SplitToolbarAction['id']) {
   actions.run(action, store.activeId).catch(report);
+}
+
+function onPaneSize(paneId: string, cols: number, rows: number) {
+  terminalSizes.value[paneId] = { cols, rows };
+}
+
+async function persistCatalog(next: WorkspaceCatalog): Promise<boolean> {
+  if (!(await persistConfig(next, theme.value))) return false;
+  workspaceCatalog.value = next;
+  workspaceError.value = undefined;
+  return true;
+}
+
+async function saveCurrentWorkspace(name?: string): Promise<boolean> {
+  const current = findWorkspace(workspaceCatalog.value, workspaceCatalog.value.activeId);
+  if (!current && workspaceCatalog.value.workspaces.length >= MAX_WORKSPACES) {
+    workspaceError.value = `Ya existen ${MAX_WORKSPACES} workspaces. Elimina uno antes de guardar otro.`;
+    return false;
+  }
+  const id = current?.id ?? createWorkspaceId();
+  const workspace = createWorkspaceRecord(
+    id,
+    name ?? current?.name ?? 'Workspace principal',
+    store.snapshot(),
+  );
+  let next = upsertWorkspace(workspaceCatalog.value, workspace);
+  next = setActiveWorkspace(next, id);
+  return persistCatalog(next);
+}
+
+function openWorkspaceDialog(mode: 'new' | 'save') {
+  workspaceError.value = undefined;
+  workspaceDialogMode.value = mode;
+  workspaceDialogVisible.value = true;
+}
+
+async function saveWorkspaceFromMenu() {
+  if (
+    workspaceCatalog.value.activeId &&
+    findWorkspace(workspaceCatalog.value, workspaceCatalog.value.activeId)
+  ) {
+    await saveCurrentWorkspace();
+  } else {
+    openWorkspaceDialog('save');
+  }
+}
+
+async function createNewWorkspace(name: string): Promise<boolean> {
+  if (workspaceCatalog.value.workspaces.length >= MAX_WORKSPACES) {
+    workspaceError.value = `Ya existen ${MAX_WORKSPACES} workspaces. Elimina uno antes de crear otro.`;
+    return false;
+  }
+  if (workspaceCatalog.value.activeId && !(await saveCurrentWorkspace())) return false;
+  const previousSnapshot = store.snapshot();
+  const cwd = store.panes[store.activeId]?.cwd ?? home.value ?? '/';
+  store.reset(cwd);
+  layoutRevision.value += 1;
+  const workspace = createWorkspaceRecord(createWorkspaceId(), name, store.snapshot());
+  let next = upsertWorkspace(workspaceCatalog.value, workspace);
+  next = setActiveWorkspace(next, workspace.id);
+  if (await persistCatalog(next)) return true;
+  store.restore(previousSnapshot);
+  layoutRevision.value += 1;
+  return false;
+}
+
+async function submitWorkspaceName(name: string) {
+  const saved =
+    workspaceDialogMode.value === 'new'
+      ? await createNewWorkspace(name)
+      : await saveCurrentWorkspace(name);
+  if (saved) workspaceDialogVisible.value = false;
+}
+
+async function restoreWorkspace(id: string) {
+  const workspace = findWorkspace(workspaceCatalog.value, id);
+  if (!workspace || workspaceCatalog.value.activeId === id) return;
+  if (workspaceCatalog.value.activeId && !(await saveCurrentWorkspace())) return;
+  const previousSnapshot = store.snapshot();
+  if (!store.restore(workspace.snapshot)) return;
+  const restoredWorkspace = { ...workspace, snapshot: store.snapshot() };
+  const next = setActiveWorkspace(upsertWorkspace(workspaceCatalog.value, restoredWorkspace), id);
+  if (!(await persistCatalog(next))) {
+    store.restore(previousSnapshot);
+    return;
+  }
+  layoutRevision.value += 1;
+}
+
+async function deleteWorkspace(id: string) {
+  const workspace = findWorkspace(workspaceCatalog.value, id);
+  if (!workspace) return;
+  const confirmed = await ask(`Se eliminará el workspace “${workspace.name}”.`, {
+    title: 'Eliminar workspace',
+    kind: 'warning',
+    okLabel: 'Eliminar',
+    cancelLabel: 'Cancelar',
+  });
+  if (!confirmed) return;
+  const wasActive = workspaceCatalog.value.activeId === id;
+  if (!(await persistCatalog(removeWorkspace(workspaceCatalog.value, id)))) return;
+  if (wasActive) {
+    store.reset(store.panes[store.activeId]?.cwd ?? home.value ?? '/');
+    layoutRevision.value += 1;
+  }
 }
 
 function cancelClose() {
@@ -104,8 +264,13 @@ function cancelClose() {
 }
 
 async function finishClose(restore: boolean) {
-  if (restore) saveSession(window.localStorage, store.snapshot());
-  else clearSession(window.localStorage);
+  workspaceError.value = undefined;
+  if (restore) {
+    if (!(await saveCurrentWorkspace())) return;
+  } else {
+    const next = setActiveWorkspace(workspaceCatalog.value, null);
+    if (!(await persistCatalog(next))) return;
+  }
   closePromptVisible.value = false;
   allowWindowClose = true;
   try {
@@ -119,8 +284,6 @@ async function finishClose(restore: boolean) {
 onMounted(async () => {
   // Capture phase: runs before xterm handles the key.
   window.addEventListener('keydown', onKeydown, true);
-  theme.value = loadTheme(window.localStorage);
-  document.documentElement.dataset.theme = theme.value;
   try {
     unlistenClose = await appWindow.onCloseRequested((event) => {
       if (allowWindowClose) return;
@@ -136,11 +299,29 @@ onMounted(async () => {
       localHostname(),
       initialCwd(),
     ]);
+    let rawConfig: string | null = null;
+    let configRead = true;
+    try {
+      rawConfig = await configClient.read();
+    } catch (error) {
+      configRead = false;
+      report(error);
+    }
+    const config = parseConfigFile(rawConfig);
+    theme.value = config?.theme ?? loadTheme(window.localStorage);
+    document.documentElement.dataset.theme = theme.value;
     home.value = homePath;
     localHost.value = hostname;
-    const savedSession = launchCwd ? null : loadSession(window.localStorage);
-    if (savedSession) store.restore(savedSession);
+    const catalog =
+      config?.catalog ?? loadWorkspaceCatalog(window.localStorage) ?? createWorkspaceCatalog();
+    const startupCatalog = setActiveWorkspace(catalog, null);
+    workspaceCatalog.value = startupCatalog;
     store.init(launchCwd ?? homePath);
+    if (configRead && !config) {
+      void persistConfig(startupCatalog, theme.value);
+    } else if (configRead && catalog.activeId !== null) {
+      void persistConfig(startupCatalog, theme.value);
+    }
   } catch (error) {
     report(error);
   }
@@ -158,13 +339,17 @@ onBeforeUnmount(() => {
     <header class="app-toolbar" :aria-label="`Barra de herramientas de ${APP_NAME}`">
       <div class="brand" :aria-label="APP_NAME">
         <span class="brand-name">{{ APP_NAME }}</span>
+        <span class="brand-version">v{{ APP_VERSION }}</span>
       </div>
-      <span class="toolbar-divider" aria-hidden="true" />
-      <div v-if="ready" class="active-context" aria-live="polite">
-        <span class="context-kicker">ACTIVO</span>
-        <strong class="context-title">{{ activePaneTitle }}</strong>
-        <span v-if="activePanePath" class="context-path">{{ activePanePath }}</span>
-      </div>
+      <WorkspaceMenu
+        :active-id="workspaceCatalog.activeId"
+        :workspaces="workspaceCatalog.workspaces"
+        :error="workspaceError"
+        @save="saveWorkspaceFromMenu"
+        @new="openWorkspaceDialog('new')"
+        @select="restoreWorkspace"
+        @delete="deleteWorkspace"
+      />
       <div class="toolbar-spacer" />
       <nav class="toolbar-actions" aria-label="Acciones de split">
         <button
@@ -198,13 +383,17 @@ onBeforeUnmount(() => {
     </header>
     <LayoutView
       v-if="ready"
+      :key="layoutRevision"
       class="layout-view"
       :home="home"
       :local-host="localHost"
+      :theme="theme"
       @menu="openMenu"
+      @size="onPaneSize"
       @exit="(paneId) => actions.run('close', paneId).catch(report)"
       @paste="(paneId, text) => actions.pasteText(paneId, text).catch(report)"
     />
+    <StatusBar :workspace-name="activeWorkspaceName" :pane="statusPane" :pane-count="paneCount" />
     <div
       v-if="closePromptVisible"
       class="modal-backdrop"
@@ -222,26 +411,34 @@ onBeforeUnmount(() => {
         <span class="dialog-kicker">SALIR DE {{ APP_NAME.toUpperCase() }}</span>
         <h2 id="close-dialog-title">¿Cerrar la aplicación?</h2>
         <p id="close-dialog-description">
-          Puedes guardar la distribución actual y volver a abrir tus terminales en sus últimas
-          carpetas.
+          Puedes guardar el workspace actual y volver a abrir sus splits, carpetas y agentes.
         </p>
         <div class="close-dialog__actions">
           <button class="dialog-button dialog-button--quiet" type="button" @click="cancelClose">
             Cancelar
           </button>
           <button class="dialog-button" type="button" @click="finishClose(false)">
-            Cerrar sin restaurar
+            Cerrar sin guardar workspace
           </button>
           <button
             class="dialog-button dialog-button--primary"
             type="button"
             @click="finishClose(true)"
           >
-            Cerrar y restaurar sesión
+            Cerrar y guardar workspace
           </button>
+          <p v-if="workspaceError" class="workspace-error" role="alert">{{ workspaceError }}</p>
         </div>
       </section>
     </div>
+    <WorkspaceNameDialog
+      :visible="workspaceDialogVisible"
+      :title="workspaceDialogTitle"
+      :description="workspaceDialogDescription"
+      :error="workspaceError"
+      @cancel="workspaceDialogVisible = false"
+      @submit="submitWorkspaceName"
+    />
   </main>
 </template>
 
@@ -281,44 +478,18 @@ onBeforeUnmount(() => {
   letter-spacing: 0.02em;
 }
 
-.toolbar-divider {
-  width: 1px;
-  height: 16px;
-  background: var(--border);
-}
-
-.active-context {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-  color: var(--muted);
-}
-
-.context-kicker {
-  color: var(--accent);
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-}
-
-.context-title {
-  max-width: 200px;
-  overflow: hidden;
-  color: var(--text);
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.context-path {
-  max-width: 220px;
-  overflow: hidden;
+.brand-version {
   color: var(--muted);
   font-family: Menlo, monospace;
-  font-size: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.workspace-error {
+  margin: 10px 0 0;
+  color: var(--danger, #ff8c8c) !important;
+  font-size: 11px !important;
 }
 
 .toolbar-spacer {
@@ -560,11 +731,6 @@ onBeforeUnmount(() => {
 @media (max-width: 680px) {
   .app-toolbar {
     padding: 0 8px;
-  }
-
-  .toolbar-divider,
-  .active-context {
-    display: none;
   }
 
   .toolbar-action__label {

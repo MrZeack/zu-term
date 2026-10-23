@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Zu Term windows: only what the UI calls (home dir, context menu, close, confirm dialog, text clipboard).",
+  "description": "Zu Term windows: only what the UI calls (home dir, config file, context menu, close, confirm dialog, text clipboard).",
   "windows": ["main", "zu-term-window-*"],
   "permissions": [
     "core:path:allow-resolve-directory",

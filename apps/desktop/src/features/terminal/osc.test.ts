@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseOsc7, parseZuTermCommand } from './osc.ts';
+import { parseOsc7, parseZuTermAgent, parseZuTermCommand } from './osc.ts';
 
 const HOST = 'mac.local';
 
@@ -40,6 +40,33 @@ test('parseZuTermCommand ignores malformed or unrelated payloads', () => {
   assert.equal(parseZuTermCommand('OtherCommand=codex'), undefined);
   assert.equal(parseZuTermCommand('ZuTermCommand=codex%20--danger'), null);
   assert.equal(parseZuTermCommand('ZuTermCommand=codex\u001b'), null);
+});
+
+test('parseZuTermAgent reads a supported agent with or without an explicit ID', () => {
+  assert.deepEqual(parseZuTermAgent('ZuTermAgent=codex|codex-123'), {
+    provider: 'codex',
+    sessionId: 'codex-123',
+  });
+  assert.deepEqual(parseZuTermAgent('ZuTermAgent=claude'), { provider: 'claude' });
+  assert.deepEqual(parseZuTermAgent('ZuTermAgent=kiro|kiro-123'), {
+    provider: 'kiro',
+    sessionId: 'kiro-123',
+  });
+  assert.deepEqual(parseZuTermAgent('ZuTermAgent=muse|muse-123'), {
+    provider: 'muse',
+    sessionId: 'muse-123',
+  });
+  assert.deepEqual(parseZuTermAgent('ZuTermAgent=antigravity|conversation-123'), {
+    provider: 'antigravity',
+    sessionId: 'conversation-123',
+  });
+  assert.equal(parseZuTermAgent('ZuTermAgent='), null);
+});
+
+test('parseZuTermAgent rejects unsupported providers and unsafe IDs', () => {
+  assert.equal(parseZuTermAgent('OtherAgent=codex|123'), undefined);
+  assert.equal(parseZuTermAgent('ZuTermAgent=gemini|123'), null);
+  assert.equal(parseZuTermAgent("ZuTermAgent=codex|abc';rm"), null);
 });
 
 test('parseOsc7 rejects everything while the local host is unknown', () => {

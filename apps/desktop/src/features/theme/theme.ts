@@ -31,7 +31,7 @@ export function persistTheme(storage: ThemeWriter, theme: ThemeName): void {
   try {
     storage.setItem(THEME_STORAGE_KEY, theme);
   } catch {
-    // A restricted WebView may deny localStorage; the current session still works.
+    // A restricted WebView may deny localStorage; the current terminal still works.
   }
 }
 

@@ -1,4 +1,5 @@
-import { APP_COMMAND_PREFIX } from '../../core/brand.ts';
+import { APP_AGENT_PREFIX, APP_COMMAND_PREFIX } from '../../core/brand.ts';
+import { isAgentProvider, isValidAgentSessionId, type AgentState } from '../workspace/agent.ts';
 
 // OSC 7 payload ("file://host/path") → absolute path, or null if invalid.
 // Any program output can emit OSC 7, so only reports for this machine's
@@ -31,4 +32,16 @@ export function parseZuTermCommand(payload: string): string | null | undefined {
   const command = payload.slice(APP_COMMAND_PREFIX.length);
   if (!command) return null;
   return /^[A-Za-z0-9][A-Za-z0-9._+-]*$/.test(command) ? command : null;
+}
+
+// Private OSC 1337 payload emitted by shell/osc7.zsh when a supported agent
+// starts. The session ID is optional: its absence deliberately means "new".
+export function parseZuTermAgent(payload: string): AgentState | null | undefined {
+  if (!payload.startsWith(APP_AGENT_PREFIX)) return undefined;
+  const value = payload.slice(APP_AGENT_PREFIX.length);
+  if (!value) return null;
+  const [provider, sessionId, ...extra] = value.split('|');
+  if (!isAgentProvider(provider) || extra.length > 0) return null;
+  if (sessionId === undefined) return { provider };
+  return isValidAgentSessionId(sessionId) ? { provider, sessionId } : null;
 }

@@ -3,10 +3,22 @@ import { Channel, invoke } from '@tauri-apps/api/core';
 export type PtyEvent = { event: 'output'; data: string } | { event: 'exit'; data: number | null };
 
 export const ptyClient = {
-  spawn(cwd: string | undefined, cols: number, rows: number, onEvent: (event: PtyEvent) => void) {
+  spawn(
+    cwd: string | undefined,
+    historyId: string | undefined,
+    cols: number,
+    rows: number,
+    onEvent: (event: PtyEvent) => void,
+  ) {
     const channel = new Channel<PtyEvent>();
     channel.onmessage = onEvent;
-    return invoke<number>('pty_spawn', { cwd: cwd ?? null, cols, rows, onEvent: channel });
+    return invoke<number>('pty_spawn', {
+      cwd: cwd ?? null,
+      historyId: historyId ?? null,
+      cols,
+      rows,
+      onEvent: channel,
+    });
   },
   write: (id: number, data: string) => invoke<void>('pty_write', { id, data }),
   resize: (id: number, cols: number, rows: number) =>

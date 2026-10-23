@@ -1,3 +1,4 @@
+mod config;
 mod dock;
 mod host;
 mod pty;
@@ -12,6 +13,8 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            config::config_read,
+            config::config_write,
             host::local_hostname,
             host::initial_cwd,
             pty::commands::pty_spawn,

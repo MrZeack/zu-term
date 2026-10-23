@@ -6,13 +6,13 @@ Terminal de escritorio para trabajar con agentes, apps y logs en una sola ventan
 
 ## Estructura
 
-| Ruta                     | Contenido                                                        |
-| ------------------------ | ---------------------------------------------------------------- |
-| `apps/desktop/src`       | UI en Vue 3 + xterm.js, por feature (`src/features/*`)           |
-| `apps/desktop/src-tauri` | Tauri 2 en Rust: PTY por split (`src/pty`), permisos y bundle    |
-| `shell/osc7.zsh`         | integración zsh: informa cwd y comando activo a la terminal      |
-| `scripts/`               | arranque/parada en segundo plano y prueba de operación           |
-| `docs/`                  | [arquitectura](docs/ARCHITECTURE.md) y guías de buenas prácticas |
+| Ruta                     | Contenido                                                           |
+| ------------------------ | ------------------------------------------------------------------- |
+| `apps/desktop/src`       | UI en Vue 3 + xterm.js, por feature (`src/features/*`)              |
+| `apps/desktop/src-tauri` | Tauri 2 en Rust: PTY por split (`src/pty`), permisos y bundle       |
+| `shell/osc7.zsh`         | integración zsh: informa cwd, comando y agente activo a la terminal |
+| `scripts/`               | arranque/parada en segundo plano y prueba de operación              |
+| `docs/`                  | [arquitectura](docs/ARCHITECTURE.md) y guías de buenas prácticas    |
 
 ## Requisitos
 
@@ -53,23 +53,34 @@ make uninstall       # la desinstala
 | Cerrar split         | `CMD+W`       | `CTRL+SHIFT+W`   | clic derecho                             |
 | Renombrar split      | —             | —                | doble clic en la cabecera o clic derecho |
 | Redimensionar        | —             | —                | arrastrar el borde                       |
+| Reorganizar split    | —             | —                | arrastrar la cabecera a otro split       |
 
 - El split nuevo abre en la carpeta del split de origen; cerrar el último cierra la ventana.
 - La barra superior incluye botones para dividir a la derecha o hacia abajo; ambos actúan sobre el split activo.
+- La barra inferior reserva espacio fuera de la consola y muestra el split activo, ruta, comando/agente, workspace, cantidad de splits y dimensiones reales de la PTY.
+- Arrastra la cabecera de un split al borde superior, inferior, izquierdo o derecho de otro para moverlo y cambiar entre orientación horizontal y vertical. Si el borde pertenece al límite de un grupo, se reorganiza el grupo completo; suelta en el centro para intercambiar posiciones. Puedes volver a una cuadrícula equilibrada arrastrando el pane al borde interno correspondiente.
 - Cada cabecera tiene un botón `×` para cerrar directamente ese split. Si es el último, Zu Term pide confirmación antes de cerrar la ventana.
 - La cabecera muestra el comando activo (`codex`, `claude`, etc.), el nombre asignado o el título que fija el programa y la carpeta actual.
 - El botón `ACENTO` alterna rápidamente entre los temas Cian (`#00b7d5`) y Menta (`#00ca91`); la elección se conserva localmente.
 - En macOS, el menú contextual del icono de Zu Term en el Dock incluye `Nueva ventana`.
 
-### Sesiones
+### Workspaces
 
-Al cerrar una ventana, Zu Term pregunta si debe guardar la sesión. `Cerrar y restaurar sesión` conserva el árbol de splits, proporciones, nombres, títulos y última carpeta de cada shell; al próximo arranque las terminales se crean de nuevo en esas carpetas. `Cerrar sin restaurar` elimina ese punto de restauración.
+El menú `WORKSPACE` permite guardar, crear, cambiar y eliminar workspaces. Cada workspace conserva el árbol de splits, proporciones, nombres, títulos, split activo, última carpeta, historial asociado y el agente de cada pane.
 
-No se guardan procesos activos, comandos en ejecución ni scrollback: una PTY nueva no puede reanudar esos estados de forma segura.
+Al iniciar Zu Term no se abre ningún workspace automáticamente: aparece una terminal nueva y el workspace se restaura solo cuando lo seleccionas explícitamente en el menú `WORKSPACE`.
+
+La configuración se guarda en `~/.config/zu-term/config.json`; los historiales independientes de zsh se guardan en `~/.config/zu-term/history/`. En la primera ejecución, las claves actuales `zu-term.workspace.v1` y `zu-term.theme` de `localStorage` se importan al archivo. Las claves antiguas `zylo.*` no se migran.
+
+Al cerrar una ventana, Zu Term pregunta si debe guardar el workspace. `Cerrar y guardar workspace` actualiza el workspace activo; `Cerrar sin guardar workspace` desactiva la restauración automática sin eliminar los workspaces guardados.
+
+Los agentes soportados son Codex, Claude Code, Kiro, Muse Code y Antigravity. Si el agente se ejecutó con un ID explícito, el workspace guarda ese ID y al restaurar ejecuta su comando de reanudación; si se ejecutó sin ID, guarda solo el proveedor y al restaurar inicia una sesión nueva. Los comandos usados son `codex resume <ID>`, `claude --resume <ID>`, `kiro-cli chat --resume-id <ID>`, `muse resume <ID>` y `agy --conversation <ID>`.
+
+No se guardan procesos activos, comandos arbitrarios ni scrollback: la PTY se crea de nuevo y solo se relanza un agente de una lista permitida con un ID validado. El historial de comandos continúa siendo responsabilidad de zsh, pero cada pane recibe su propio `HISTFILE` bajo `~/.config/zu-term/history/` cuando la integración de `shell/osc7.zsh` está activa.
 
 ### Integración zsh
 
-Sin ella, la ruta de la cabecera no se actualiza, el comando activo no aparece y los splits nuevos abren en la carpeta inicial (necesaria si la shell corre tras un wrapper como `kiro-cli-term`). En `~/.zshrc`, antes de bloques que deban ir al final:
+Sin ella, la ruta de la cabecera no se actualiza, el comando/agente no aparece y los splits nuevos abren en la carpeta inicial (necesaria si la shell corre tras un wrapper como `kiro-cli-term`). En `~/.zshrc`, antes de bloques que deban ir al final:
 
 ```zsh
 if [[ -n "$ZU_TERM_TERMINAL" && -f "$HOME/personal/zu-term/shell/osc7.zsh" ]]; then
@@ -87,7 +98,7 @@ Después reinicia Zu Term o ejecuta `source ~/.zshrc` en cada split abierto. Com
 
 ## Limitaciones conocidas
 
-- La validación de la ventana Tauri (menú, portapapeles, diálogo, renombrado y redimensionado) sigue requiriendo una comprobación manual.
+- La validación de la ventana Tauri (menú, portapapeles, diálogo, renombrado, redimensionado y reorganización por drag-and-drop) sigue requiriendo una comprobación manual.
 - Linux se comprueba en CI mediante el bundle, pero aún no tiene validación interactiva de la ventana.
 - La aplicación no está firmada ni notarizada para distribución externa.
-- El menú del Dock y la restauración de sesión requieren validación manual en una ventana Tauri real; la cobertura automatizada prueba la lógica y la validación de datos.
+- El menú del Dock y la restauración de workspaces requieren validación manual en una ventana Tauri real; la cobertura automatizada prueba la lógica y la validación de datos.

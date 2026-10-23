@@ -8,11 +8,15 @@ const props = defineProps<{
   path: string;
   active: boolean;
   renaming: boolean;
+  draggable?: boolean;
+  dragging?: boolean;
 }>();
 const emit = defineEmits<{
   rename: [name: string];
   startRename: [];
   close: [];
+  dragstart: [event: DragEvent];
+  dragend: [];
 }>();
 
 const draft = ref('');
@@ -39,9 +43,13 @@ const commit = () => emit('rename', draft.value);
 <template>
   <header
     class="pane-header"
-    :class="{ active }"
+    :class="{ active, dragging }"
     :style="densityStyle"
+    :draggable="draggable"
+    title="Arrastra: borde para reorganizar el grupo, centro para intercambiar"
     @dblclick="emit('startRename')"
+    @dragstart="emit('dragstart', $event)"
+    @dragend="emit('dragend')"
   >
     <input
       v-if="renaming"
@@ -50,6 +58,7 @@ const commit = () => emit('rename', draft.value);
       class="title-input"
       maxlength="80"
       aria-label="Nombre del split"
+      draggable="false"
       @keydown.enter.prevent="commit"
       @keydown.esc.prevent="emit('rename', title)"
       @blur="commit"
@@ -67,6 +76,7 @@ const commit = () => emit('rename', draft.value);
       type="button"
       aria-label="Cerrar split"
       title="Cerrar split"
+      draggable="false"
       @click.stop="emit('close')"
     >
       <span aria-hidden="true">×</span>
@@ -86,6 +96,12 @@ const commit = () => emit('rename', draft.value);
   border-bottom: 1px solid var(--border);
   user-select: none;
   min-width: 0;
+  cursor: grab;
+}
+
+.pane-header.dragging {
+  cursor: grabbing;
+  opacity: 0.6;
 }
 
 .pane-header::after {
