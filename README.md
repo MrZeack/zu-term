@@ -6,19 +6,19 @@ Terminal de escritorio para trabajar con agentes, apps y logs en una sola ventan
 
 ## Estructura
 
-| Ruta                     | Contenido                                                           |
-| ------------------------ | ------------------------------------------------------------------- |
-| `apps/desktop/src`       | UI en Vue 3 + xterm.js, por feature (`src/features/*`)              |
-| `apps/desktop/src-tauri` | Tauri 2 en Rust: PTY por split (`src/pty`), permisos y bundle       |
-| `shell/osc7.zsh`         | integración zsh: informa cwd, comando y agente activo a la terminal |
-| `scripts/`               | arranque/parada en segundo plano y prueba de operación              |
-| `docs/`                  | [arquitectura](docs/ARCHITECTURE.md) y guías de buenas prácticas    |
+| Ruta                     | Contenido                                                         |
+| ------------------------ | ----------------------------------------------------------------- |
+| `apps/desktop/src`       | UI en Vue 3 + xterm.js, por feature (`src/features/*`)            |
+| `apps/desktop/src-tauri` | Tauri 2 en Rust: PTY por split (`src/pty`), permisos y bundle     |
+| `shell/osc7.zsh`         | integración zsh incluida en la app: informa cwd, comando y agente |
+| `scripts/`               | arranque/parada en segundo plano y prueba de operación            |
+| `docs/`                  | [arquitectura](docs/ARCHITECTURE.md) y guías de buenas prácticas  |
 
 ## Requisitos
 
-- Node 24 (≥ 24.8; `node-24` o `node`) y pnpm 11; Rust estable (`rustup`).
+- Node 24 (≥ 24.8; `node-24` o `node`) y pnpm 11; Rust con `rustup` (versión fijada en `rust-toolchain.toml`).
 - macOS: Xcode Command Line Tools. Linux: [dependencias de Tauri](https://v2.tauri.app/start/prerequisites/#linux) (`webkit2gtk-4.1`, etc.).
-- `zsh` con la integración de carpeta (abajo).
+- `zsh` como login shell para la integración de carpeta, comando y agente (abajo).
 
 ## Inicio rápido
 
@@ -66,34 +66,41 @@ make uninstall       # la desinstala
 
 ### Workspaces
 
-El menú `WORKSPACE` permite guardar, crear, cambiar y eliminar workspaces. Cada workspace conserva el árbol de splits, proporciones, nombres, títulos, split activo, última carpeta, historial asociado y el agente de cada pane.
+El menú `WORKSPACE` permite guardar, crear, cambiar y eliminar workspaces. Cada workspace conserva el árbol de splits, proporciones, nombres, títulos, split activo, última carpeta, historial asociado y el agente de cada pane. Después de seleccionar o crear uno, los cambios de splits, carpetas, títulos, nombres y contexto de agente se actualizan automáticamente en el workspace activo.
+
+Mientras un workspace se está restaurando, el estado global bloquea nuevas selecciones para evitar abrirlo dos veces por clics o eventos concurrentes.
+
+Cada workspace seleccionado queda bloqueado para la ventana que lo abrió; otra ventana o instancia no puede restaurarlo mientras siga abierto. Entre instancias se usa un lock del sistema sobre un archivo privado en `~/.config/zu-term/workspace-locks/`, que el sistema libera si Zu Term termina de forma abrupta. Al cerrar o destruir una ventana se liberan sus locks y se terminan sus shells.
 
 Al iniciar Zu Term no se abre ningún workspace automáticamente: aparece una terminal nueva y el workspace se restaura solo cuando lo seleccionas explícitamente en el menú `WORKSPACE`.
 
 La configuración se guarda en `~/.config/zu-term/config.json`; los historiales independientes de zsh se guardan en `~/.config/zu-term/history/`. En la primera ejecución, las claves actuales `zu-term.workspace.v1` y `zu-term.theme` de `localStorage` se importan al archivo. Las claves antiguas `zylo.*` no se migran.
 
-Al cerrar una ventana, Zu Term pregunta si debe guardar el workspace. `Cerrar y guardar workspace` actualiza el workspace activo; `Cerrar sin guardar workspace` desactiva la restauración automática sin eliminar los workspaces guardados.
+Al cerrar una ventana, Zu Term pregunta si debe guardar el workspace. `Cerrar y guardar workspace` fuerza una última actualización del workspace activo; `Cerrar sin guardar workspace` desactiva la restauración automática sin eliminar los workspaces guardados.
 
-Los agentes soportados son Codex, Claude Code, Kiro, Muse Code y Antigravity. Si el agente se ejecutó con un ID explícito, el workspace guarda ese ID y al restaurar ejecuta su comando de reanudación; si se ejecutó sin ID, guarda solo el proveedor y al restaurar inicia una sesión nueva. Los comandos usados son `codex resume <ID>`, `claude --resume <ID>`, `kiro-cli chat --resume-id <ID>`, `muse resume <ID>` y `agy --conversation <ID>`.
+Los agentes soportados son Codex, Claude Code, Kiro, Muse Code y Antigravity. Solo se restauran agentes ejecutados con un ID explícito: el workspace guarda ese ID y al restaurar ejecuta su comando de reanudación. Un agente sin ID no se guarda y su pane se restaura como una shell vacía. Los comandos usados son `codex resume <ID>`, `claude --resume <ID>`, `kiro-cli chat --resume-id <ID>`, `muse resume <ID>` y `agy --conversation <ID>`.
 
-No se guardan procesos activos, comandos arbitrarios ni scrollback: la PTY se crea de nuevo y solo se relanza un agente de una lista permitida con un ID validado. El historial de comandos continúa siendo responsabilidad de zsh, pero cada pane recibe su propio `HISTFILE` bajo `~/.config/zu-term/history/` cuando la integración de `shell/osc7.zsh` está activa.
+No se guardan procesos activos, comandos arbitrarios ni scrollback: la PTY se crea de nuevo y solo se relanza un agente de una lista permitida con un ID validado. El historial de comandos continúa siendo responsabilidad de zsh, pero cada pane recibe su propio `HISTFILE` bajo `~/.config/zu-term/history/`.
 
 ### Integración zsh
 
-Sin ella, la ruta de la cabecera no se actualiza, el comando/agente no aparece y los splits nuevos abren en la carpeta inicial (necesaria si la shell corre tras un wrapper como `kiro-cli-term`). En `~/.zshrc`, antes de bloques que deban ir al final:
+Se carga sola: la app incluye `shell/osc7.zsh` y, cuando la login shell es zsh, lo instala en `~/.config/zu-term/shell-integration/zsh/` y lo activa mediante `ZDOTDIR`, sin tocar `~/.zshrc`. Tu `ZDOTDIR` y tus `.zshenv`, `.zprofile` y `.zshrc` se cargan como siempre.
+
+Si `~/.zshrc` lanza otra shell mediante un wrapper (p. ej. `kiro-cli-term`), esa shell interna no hereda la integración. En ese caso, cárgala desde `~/.zshrc`:
 
 ```zsh
-if [[ -n "$ZU_TERM_TERMINAL" && -f "$HOME/personal/zu-term/shell/osc7.zsh" ]]; then
-  source "$HOME/personal/zu-term/shell/osc7.zsh"
-fi
+[[ -n "$ZU_TERM_TERMINAL" && -r ~/.config/zu-term/shell-integration/zsh/zu-term.zsh ]] &&
+  source ~/.config/zu-term/shell-integration/zsh/zu-term.zsh
 ```
 
-Después reinicia Zu Term o ejecuta `source ~/.zshrc` en cada split abierto. Comprueba que `echo "$ZU_TERM_TERMINAL"` muestra `1`, ejecuta `pwd`, cambia con `cd /tmp` y usa uno de los botones de split: el nuevo split debe iniciar en `/tmp`.
+Comprueba que funciona con `cd /tmp` seguido de un split: el nuevo split debe iniciar en `/tmp`.
 
 ## Seguridad
 
-- La UI solo tiene permisos de menú, cerrar sus ventanas, diálogo de confirmación y portapapeles de texto ([capabilities](apps/desktop/src-tauri/capabilities/default.json)); CSP sin orígenes externos.
-- El backend valida tamaño de terminal, tamaño de escritura (≤ 1 MiB) y carpeta inicial (absoluta y existente; si no, `$HOME`).
+- La UI solo tiene los permisos que invoca, incluidos los comandos propios declarados en `build.rs` ([capabilities](apps/desktop/src-tauri/capabilities/default.json)); CSP sin orígenes externos.
+- El backend valida tamaño de terminal, tamaño de escritura (≤ 1 MiB) y carpeta inicial (absoluta y existente; si no, el home). Cada PTY y cada lock pertenecen a la ventana que los creó, según su etiqueta de Tauri y no según un valor del cliente.
+- La entrada de cada PTY pasa por una cola acotada en su propio hilo: un proceso que no lee rechaza la escritura sin bloquear la UI ni otros panes.
+- `config.json` se reemplaza de forma atómica y los archivos privados se crean con permisos `0600`.
 - Dependencias JavaScript con versión exacta, lockfiles versionados y `minimumReleaseAge` de 2 días.
 
 ## Limitaciones conocidas

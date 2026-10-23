@@ -1,8 +1,14 @@
-# Only warnings that come transitively from Tauri's Linux GTK stack
-# (tauri → muda/tao → gtk 0.18) and have no fix until Tauri moves to GTK 4.
+# Only warnings that come transitively from Tauri itself and have no fix
+# until Tauri replaces the dependency: its Linux GTK stack (tauri → muda/tao →
+# gtk 0.18) and `urlpattern` (tauri-utils → urlpattern 0.3 → unic-*).
 # Review on every Tauri upgrade; anything else still fails `make audit`.
 [advisories]
 ignore = [
   "RUSTSEC-2024-0370", # proc-macro-error unmaintained (build-time macro of gtk 0.18)
   "RUSTSEC-2024-0429", # glib VariantStrIter unsound; not used by this app
+  "RUSTSEC-2025-0075", # unic-char-range unmaintained (urlpattern)
+  "RUSTSEC-2025-0080", # unic-common unmaintained (urlpattern)
+  "RUSTSEC-2025-0081", # unic-char-property unmaintained (urlpattern)
+  "RUSTSEC-2025-0098", # unic-ucd-version unmaintained (urlpattern)
+  "RUSTSEC-2025-0100", # unic-ucd-ident unmaintained (urlpattern)
 ]

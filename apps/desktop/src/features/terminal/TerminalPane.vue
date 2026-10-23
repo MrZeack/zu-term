@@ -3,7 +3,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
 import { onBeforeUnmount, onMounted, useTemplateRef, watch } from 'vue';
 import { UI_DENSITY } from '../../core/ui-density.ts';
-import { buildAgentCommand, type AgentState } from '../workspace/agent.ts';
+import { buildAgentResumeCommand, type AgentState } from '../workspace/agent.ts';
 import { parseOsc7, parseZuTermAgent, parseZuTermCommand } from './osc.ts';
 import { ptyClient } from './pty-client.ts';
 import { terminals } from './terminal-registry.ts';
@@ -35,7 +35,8 @@ const term = new Terminal({
   fontFamily: 'Menlo, "DejaVu Sans Mono", "Liberation Mono", monospace',
   fontSize: UI_DENSITY.terminalFontSize,
   cursorBlink: true,
-  scrollback: 100_000,
+  // Bounded per pane: up to 32 panes share the webview's memory.
+  scrollback: 10_000,
   theme: terminalTheme(props.theme),
 });
 const fit = new FitAddon();
@@ -135,9 +136,8 @@ onMounted(async () => {
     if (unmounted) ptyClient.kill(id).catch(report);
     else {
       ptyId = id;
-      if (props.restoreAgent) {
-        ptyClient.write(id, `${buildAgentCommand(props.restoreAgent)}\n`).catch(report);
-      }
+      const resume = props.restoreAgent && buildAgentResumeCommand(props.restoreAgent);
+      if (resume) ptyClient.write(id, `${resume}\n`).catch(report);
     }
   } catch (error) {
     term.write(`\r\nNo se pudo iniciar la shell: ${String(error)}\r\n`);

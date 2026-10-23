@@ -1,27 +1,32 @@
-use std::path::PathBuf;
-
 use portable_pty::CommandBuilder;
-use tauri::State;
 use tauri::ipc::Channel;
+use tauri::{State, WebviewWindow};
 
 use super::options::resolve_cwd;
 use super::registry::{PtyEvent, PtyRegistry};
-use crate::config::history_file;
+#[cfg(unix)]
+use super::shell_integration;
+use crate::config::{AppPaths, history_file};
 
-fn home_dir() -> PathBuf {
-    std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/"))
-}
-
-/// The user's login shell, started in `cwd`. `ZU_TERM_TERMINAL` lets shell
-/// integration (shell/osc7.zsh) know it runs here.
-fn shell_command(cwd: Option<&str>, history_id: Option<&str>) -> Result<CommandBuilder, String> {
+/// The user's login shell, started in `cwd`, with the bundled zsh integration
+/// (shell/osc7.zsh). `ZU_TERM_TERMINAL` tells shells they run here.
+fn shell_command(
+    paths: &AppPaths,
+    cwd: Option<&str>,
+    history_id: Option<&str>,
+) -> Result<CommandBuilder, String> {
     let mut command = CommandBuilder::new_default_prog();
-    command.cwd(resolve_cwd(cwd, &home_dir()));
+    #[cfg(unix)]
+    {
+        let shell = command.get_shell();
+        shell_integration::apply(&mut command, &shell, &paths.config)?;
+    }
+    command.cwd(resolve_cwd(cwd, &paths.home));
     command.env("TERM", "xterm-256color");
     command.env("COLORTERM", "truecolor");
     command.env("TERM_PROGRAM", "zu-term");
     command.env("ZU_TERM_TERMINAL", "1");
-    if let Some(history_path) = history_file(history_id)? {
+    if let Some(history_path) = history_file(&paths.config, history_id)? {
         let history_path = history_path.to_string_lossy().into_owned();
         command.env("HISTFILE", &history_path);
         command.env("ZU_TERM_HISTORY_FILE", history_path);
@@ -29,9 +34,14 @@ fn shell_command(cwd: Option<&str>, history_id: Option<&str>) -> Result<CommandB
     Ok(command)
 }
 
+// Sessions are bound to the calling window's label, never to a client value.
+// Tauri injects window and state as arguments, hence the long signature.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub fn pty_spawn(
+    window: WebviewWindow,
     registry: State<'_, PtyRegistry>,
+    paths: State<'_, AppPaths>,
     cwd: Option<String>,
     history_id: Option<String>,
     cols: u16,
@@ -39,7 +49,8 @@ pub fn pty_spawn(
     on_event: Channel<PtyEvent>,
 ) -> Result<u32, String> {
     registry.spawn(
-        shell_command(cwd.as_deref(), history_id.as_deref())?,
+        window.label(),
+        shell_command(&paths, cwd.as_deref(), history_id.as_deref())?,
         cols,
         rows,
         move |event| {
@@ -49,21 +60,27 @@ pub fn pty_spawn(
 }
 
 #[tauri::command]
-pub fn pty_write(registry: State<'_, PtyRegistry>, id: u32, data: String) -> Result<(), String> {
-    registry.write(id, &data)
+pub fn pty_write(
+    window: WebviewWindow,
+    registry: State<'_, PtyRegistry>,
+    id: u32,
+    data: String,
+) -> Result<(), String> {
+    registry.write(window.label(), id, &data)
 }
 
 #[tauri::command]
 pub fn pty_resize(
+    window: WebviewWindow,
     registry: State<'_, PtyRegistry>,
     id: u32,
     cols: u16,
     rows: u16,
 ) -> Result<(), String> {
-    registry.resize(id, cols, rows)
+    registry.resize(window.label(), id, cols, rows)
 }
 
 #[tauri::command]
-pub fn pty_kill(registry: State<'_, PtyRegistry>, id: u32) {
-    registry.kill(id);
+pub fn pty_kill(window: WebviewWindow, registry: State<'_, PtyRegistry>, id: u32) {
+    registry.kill(window.label(), id);
 }

@@ -54,6 +54,8 @@ _zu_term_agent_payload() {
     esac
   done
 
+  session="${(Q)session}"
+
   if [[ -n "$session" && "$session" =~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$' ]]; then
     print -r -- "$provider|$session"
   else
@@ -78,18 +80,28 @@ _zu_term_preexec() {
   else
     _zu_term_emit_command ''
   fi
-  _zu_term_emit_agent "$(_zu_term_agent_payload "${words[@]}")"
+  local agent_payload
+  agent_payload="$(_zu_term_agent_payload "${words[@]}")"
+  if [[ -n "$agent_payload" ]]; then
+    _zu_term_emit_agent "$agent_payload"
+  fi
 }
 
 _zu_term_precmd() {
   _zu_term_emit_command ''
-  _zu_term_emit_agent ''
 }
 
 _zu_term_configure_history() {
   if [[ -n "${ZU_TERM_HISTORY_FILE:-}" ]]; then
     HISTFILE="$ZU_TERM_HISTORY_FILE"
     export HISTFILE
+    (( HISTSIZE < 10000 )) && HISTSIZE=10000
+    (( SAVEHIST < 10000 )) && SAVEHIST=10000
+    setopt INC_APPEND_HISTORY 2>/dev/null || true
+    if [[ "${_ZU_TERM_HISTORY_LOADED:-}" != "$HISTFILE" ]]; then
+      [[ -f "$HISTFILE" ]] && fc -R "$HISTFILE" 2>/dev/null || true
+      _ZU_TERM_HISTORY_LOADED="$HISTFILE"
+    fi
   fi
 }
 

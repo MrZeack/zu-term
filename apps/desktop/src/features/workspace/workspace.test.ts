@@ -51,7 +51,7 @@ const panes: Record<string, PaneState> = {
   'pane-2': { id: 'pane-2', cwd: '/Users/me/project/api', agent: { provider: 'claude' } },
 };
 
-test('crea un snapshot de workspace con agentes y sin comandos transitorios', () => {
+test('crea un snapshot de workspace solo con agentes reanudables y sin comandos transitorios', () => {
   const snapshot = createWorkspaceSnapshot(root, panes, 'pane-2');
 
   assert.deepEqual(snapshot.panes, {
@@ -67,8 +67,51 @@ test('crea un snapshot de workspace con agentes y sin comandos transitorios', ()
       id: 'pane-2',
       startCwd: '/Users/me/project/api',
       cwd: '/Users/me/project/api',
-      agent: { provider: 'claude' },
     },
+  });
+});
+
+test('descarta al cargar agentes guardados sin ID sin invalidar el pane', () => {
+  const snapshot = createWorkspaceSnapshot(root, panes, 'pane-1');
+  const catalog = upsertWorkspace(
+    createWorkspaceCatalog(),
+    createWorkspaceRecord('ws-1', 'Proyecto', snapshot, 123),
+  );
+  const legacy = structuredClone(catalog);
+  const legacyPane = legacy.workspaces[0]?.snapshot.panes['pane-2'];
+  assert.ok(legacyPane);
+  legacyPane.agent = { provider: 'claude' };
+
+  const loaded = loadWorkspaceCatalog(storage(JSON.stringify(legacy)));
+  assert.deepEqual(loaded, catalog);
+});
+
+test('normaliza las comillas del ID del agente al crear el snapshot', () => {
+  const snapshot = createWorkspaceSnapshot(
+    { kind: 'pane', id: 'pane-1' },
+    { 'pane-1': { id: 'pane-1', agent: { provider: 'codex', sessionId: "'codex-123'" } } },
+    'pane-1',
+  );
+
+  assert.deepEqual(snapshot.panes['pane-1']?.agent, {
+    provider: 'codex',
+    sessionId: 'codex-123',
+  });
+
+  const snapshotUuid = createWorkspaceSnapshot(
+    { kind: 'pane', id: 'pane-1' },
+    {
+      'pane-1': {
+        id: 'pane-1',
+        agent: { provider: 'codex', sessionId: "'01a164cb-0da6-7401-9c12-aa73e8a80bb7'" },
+      },
+    },
+    'pane-1',
+  );
+
+  assert.deepEqual(snapshotUuid.panes['pane-1']?.agent, {
+    provider: 'codex',
+    sessionId: '01a164cb-0da6-7401-9c12-aa73e8a80bb7',
   });
 });
 

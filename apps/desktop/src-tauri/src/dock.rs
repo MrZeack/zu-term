@@ -84,6 +84,9 @@ mod macos {
         let menu_raw = Retained::into_raw(menu);
         DOCK_MENU.store(menu_raw.cast(), Ordering::Release);
 
+        // Tauri has no Dock menu API, so the methods are added to the
+        // delegate class that tao creates. This depends on tao's private
+        // delegate: re-check the Dock menu manually after upgrading Tauri.
         let class = delegate_object.class() as *const _ as *mut _;
         let dock_menu_fn: extern "C-unwind" fn(&AnyObject, Sel, &NSApplication) -> *mut NSMenu =
             application_dock_menu;

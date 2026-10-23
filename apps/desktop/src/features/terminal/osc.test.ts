@@ -63,6 +63,21 @@ test('parseZuTermAgent reads a supported agent with or without an explicit ID', 
   assert.equal(parseZuTermAgent('ZuTermAgent='), null);
 });
 
+test('parseZuTermAgent accepts IDs wrapped in comillas simples o dobles', () => {
+  assert.deepEqual(parseZuTermAgent("ZuTermAgent=codex|'codex-123'"), {
+    provider: 'codex',
+    sessionId: 'codex-123',
+  });
+  assert.deepEqual(parseZuTermAgent('ZuTermAgent=claude|"claude-123"'), {
+    provider: 'claude',
+    sessionId: 'claude-123',
+  });
+  assert.deepEqual(parseZuTermAgent("ZuTermAgent=codex|'01a164cb-0da6-7401-9c12-aa73e8a80bb7'"), {
+    provider: 'codex',
+    sessionId: '01a164cb-0da6-7401-9c12-aa73e8a80bb7',
+  });
+});
+
 test('parseZuTermAgent rejects unsupported providers and unsafe IDs', () => {
   assert.equal(parseZuTermAgent('OtherAgent=codex|123'), undefined);
   assert.equal(parseZuTermAgent('ZuTermAgent=gemini|123'), null);

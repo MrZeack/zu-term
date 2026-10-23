@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from 'vue';
 import { paneIds } from '../layout/layout-tree.ts';
 import type { WorkspaceRecord } from './workspace.ts';
 
@@ -7,6 +7,7 @@ const props = defineProps<{
   activeId: string | null;
   workspaces: WorkspaceRecord[];
   error?: string | undefined;
+  busy: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -33,6 +34,13 @@ function closeOnOutside(event: PointerEvent) {
   open.value = false;
 }
 
+watch(
+  () => props.busy,
+  (busy) => {
+    if (busy) open.value = false;
+  },
+);
+
 onMounted(() => document.addEventListener('pointerdown', closeOnOutside));
 onBeforeUnmount(() => document.removeEventListener('pointerdown', closeOnOutside));
 </script>
@@ -42,6 +50,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', closeOnOutside
     <button
       class="workspace-trigger"
       type="button"
+      :disabled="busy"
       aria-haspopup="menu"
       :aria-expanded="open"
       aria-label="Abrir menú principal de workspaces"
@@ -57,11 +66,21 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', closeOnOutside
         <span>Workspaces</span>
         <small>{{ workspaces.length }} guardados</small>
       </div>
-      <button class="workspace-menu__action" type="button" @click="closeAnd(() => emit('save'))">
+      <button
+        class="workspace-menu__action"
+        type="button"
+        :disabled="busy"
+        @click="closeAnd(() => emit('save'))"
+      >
         <span aria-hidden="true">↓</span>
         Guardar workspace
       </button>
-      <button class="workspace-menu__action" type="button" @click="closeAnd(() => emit('new'))">
+      <button
+        class="workspace-menu__action"
+        type="button"
+        :disabled="busy"
+        @click="closeAnd(() => emit('new'))"
+      >
         <span aria-hidden="true">＋</span>
         Nuevo workspace
       </button>
@@ -74,6 +93,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', closeOnOutside
             :class="{ active: workspace.id === activeId }"
             type="button"
             role="menuitem"
+            :disabled="busy"
             @click="closeAnd(() => emit('select', workspace.id))"
           >
             <strong>{{ workspace.name }}</strong>
@@ -82,6 +102,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', closeOnOutside
           <button
             class="workspace-delete"
             type="button"
+            :disabled="busy"
             :aria-label="`Eliminar workspace ${workspace.name}`"
             :title="`Eliminar workspace ${workspace.name}`"
             @click="emit('delete', workspace.id)"

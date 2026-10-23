@@ -1,7 +1,7 @@
 import { APP_SLUG } from '../../core/brand.ts';
 import { paneIds, type LayoutNode } from '../layout/layout-tree.ts';
 import type { PaneState } from '../layout/layout.store.ts';
-import { parseAgentState, type AgentState } from './agent.ts';
+import { parseAgentState, parseResumableAgent, type AgentState } from './agent.ts';
 
 export const WORKSPACE_STORAGE_KEY = `${APP_SLUG}.workspace.v1`;
 export const MAX_WORKSPACES = 24;
@@ -131,7 +131,9 @@ function parsePane(value: unknown, id: string): PersistedPane | null {
   if (value.agent !== undefined) {
     const agent = parseAgentState(value.agent);
     if (!agent) return null;
-    pane.agent = agent;
+    // Older catalogs stored agents without an ID; they are not restorable.
+    const resumable = parseResumableAgent(agent);
+    if (resumable) pane.agent = resumable;
   }
   return pane;
 }
@@ -217,20 +219,14 @@ export function createWorkspaceSnapshot(
     const name = boundedString(pane.name, MAX_LABEL_LENGTH);
     const terminalTitle = boundedString(pane.terminalTitle, MAX_LABEL_LENGTH);
     const historyId = safeHistoryId(pane.historyId);
+    const agent = pane.agent ? parseResumableAgent(pane.agent) : null;
     persistedPanes[id] = {
       id,
       ...(historyId ? { historyId } : {}),
       ...(cwd ? { startCwd: cwd, cwd } : {}),
       ...(name ? { name } : {}),
       ...(terminalTitle ? { terminalTitle } : {}),
-      ...(pane.agent
-        ? {
-            agent: {
-              provider: pane.agent.provider,
-              ...(pane.agent.sessionId ? { sessionId: pane.agent.sessionId } : {}),
-            },
-          }
-        : {}),
+      ...(agent ? { agent } : {}),
     };
   }
 
@@ -241,6 +237,16 @@ export function createWorkspaceSnapshot(
     panes: persistedPanes,
     activeId: ids.includes(activeId) ? activeId : fallbackActiveId,
   };
+}
+
+export function syncActiveWorkspace(
+  catalog: WorkspaceCatalog,
+  snapshot: WorkspaceSnapshot,
+  updatedAt = Date.now(),
+): WorkspaceCatalog | null {
+  const active = findWorkspace(catalog, catalog.activeId);
+  if (!active) return null;
+  return upsertWorkspace(catalog, { ...active, snapshot, updatedAt });
 }
 
 export function findWorkspace(

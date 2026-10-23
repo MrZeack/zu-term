@@ -3,8 +3,8 @@ import { homeDir } from '@tauri-apps/api/path';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { ask } from '@tauri-apps/plugin-dialog';
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import { useLayoutStore } from './core/app-stores.ts';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useLayoutStore, useWorkspaceOperationStore } from './core/app-stores.ts';
 import { APP_NAME, APP_VERSION } from './core/brand.ts';
 import { UI_DENSITY } from './core/ui-density.ts';
 import { configClient } from './features/config/config-client.ts';
@@ -32,6 +32,8 @@ import {
 } from './features/theme/theme.ts';
 import WorkspaceMenu from './features/workspace/WorkspaceMenu.vue';
 import WorkspaceNameDialog from './features/workspace/WorkspaceNameDialog.vue';
+import { workspaceLockClient } from './features/workspace/workspace-lock-client.ts';
+import { createWorkspaceSession } from './features/workspace/workspace-session.ts';
 import {
   createWorkspaceCatalog,
   createWorkspaceId,
@@ -41,11 +43,13 @@ import {
   loadWorkspaceCatalog,
   MAX_WORKSPACES,
   setActiveWorkspace,
+  syncActiveWorkspace,
   upsertWorkspace,
   type WorkspaceCatalog,
 } from './features/workspace/workspace.ts';
 
 const store = useLayoutStore();
+const workspaceOperation = useWorkspaceOperationStore();
 const appWindow = getCurrentWindow();
 const home = ref<string>();
 const localHost = ref<string>();
@@ -92,6 +96,7 @@ const densityStyle = {
 };
 let allowWindowClose = false;
 let unlistenClose: (() => void) | undefined;
+let workspaceMutationSuspended = 0;
 
 const actions = createPaneActions({
   store,
@@ -108,6 +113,15 @@ const actions = createPaneActions({
 });
 
 const report = (error: unknown) => console.error(error);
+
+const session = createWorkspaceSession({
+  writeConfig: configClient.write,
+  locks: workspaceLockClient,
+  onError: (message, error) => {
+    workspaceError.value = message;
+    if (error !== undefined) report(error);
+  },
+});
 
 function onKeydown(event: KeyboardEvent) {
   const action = shortcutAction(event, isMac);
@@ -128,15 +142,8 @@ function openMenu(paneId: string, position: ContextMenuPosition) {
   ).catch(report);
 }
 
-async function persistConfig(catalog: WorkspaceCatalog, nextTheme: ThemeName): Promise<boolean> {
-  try {
-    await configClient.write(JSON.stringify(createConfigFile(nextTheme, catalog)));
-    return true;
-  } catch (error) {
-    workspaceError.value = 'No se pudo guardar la configuración en ~/.config/zu-term.';
-    report(error);
-    return false;
-  }
+function persistConfig(catalog: WorkspaceCatalog, nextTheme: ThemeName): Promise<boolean> {
+  return session.persist(JSON.stringify(createConfigFile(nextTheme, catalog)));
 }
 
 async function setTheme(next: ThemeName) {
@@ -165,6 +172,13 @@ async function persistCatalog(next: WorkspaceCatalog): Promise<boolean> {
   return true;
 }
 
+function persistActiveWorkspaceSnapshot() {
+  if (!ready.value || workspaceMutationSuspended > 0) return;
+  const next = syncActiveWorkspace(workspaceCatalog.value, store.snapshot());
+  if (!next) return;
+  void persistCatalog(next);
+}
+
 async function saveCurrentWorkspace(name?: string): Promise<boolean> {
   const current = findWorkspace(workspaceCatalog.value, workspaceCatalog.value.activeId);
   if (!current && workspaceCatalog.value.workspaces.length >= MAX_WORKSPACES) {
@@ -172,6 +186,8 @@ async function saveCurrentWorkspace(name?: string): Promise<boolean> {
     return false;
   }
   const id = current?.id ?? createWorkspaceId();
+  const ownsNewLock = !current;
+  if (ownsNewLock && !(await session.acquire(id))) return false;
   const workspace = createWorkspaceRecord(
     id,
     name ?? current?.name ?? 'Workspace principal',
@@ -179,7 +195,12 @@ async function saveCurrentWorkspace(name?: string): Promise<boolean> {
   );
   let next = upsertWorkspace(workspaceCatalog.value, workspace);
   next = setActiveWorkspace(next, id);
-  return persistCatalog(next);
+  if (await persistCatalog(next)) {
+    if (ownsNewLock) await session.claim(id);
+    return true;
+  }
+  if (ownsNewLock) await session.release(id);
+  return false;
 }
 
 function openWorkspaceDialog(mode: 'new' | 'save') {
@@ -205,17 +226,28 @@ async function createNewWorkspace(name: string): Promise<boolean> {
     return false;
   }
   if (workspaceCatalog.value.activeId && !(await saveCurrentWorkspace())) return false;
-  const previousSnapshot = store.snapshot();
-  const cwd = store.panes[store.activeId]?.cwd ?? home.value ?? '/';
-  store.reset(cwd);
-  layoutRevision.value += 1;
-  const workspace = createWorkspaceRecord(createWorkspaceId(), name, store.snapshot());
-  let next = upsertWorkspace(workspaceCatalog.value, workspace);
-  next = setActiveWorkspace(next, workspace.id);
-  if (await persistCatalog(next)) return true;
-  store.restore(previousSnapshot);
-  layoutRevision.value += 1;
-  return false;
+  const id = createWorkspaceId();
+  if (!(await session.acquire(id))) return false;
+  workspaceMutationSuspended += 1;
+  try {
+    const previousSnapshot = store.snapshot();
+    const cwd = store.panes[store.activeId]?.cwd ?? home.value ?? '/';
+    store.reset(cwd);
+    layoutRevision.value += 1;
+    const workspace = createWorkspaceRecord(id, name, store.snapshot());
+    let next = upsertWorkspace(workspaceCatalog.value, workspace);
+    next = setActiveWorkspace(next, workspace.id);
+    if (await persistCatalog(next)) {
+      await session.claim(id);
+      return true;
+    }
+    store.restore(previousSnapshot);
+    layoutRevision.value += 1;
+    await session.release(id);
+    return false;
+  } finally {
+    workspaceMutationSuspended -= 1;
+  }
 }
 
 async function submitWorkspaceName(name: string) {
@@ -229,16 +261,37 @@ async function submitWorkspaceName(name: string) {
 async function restoreWorkspace(id: string) {
   const workspace = findWorkspace(workspaceCatalog.value, id);
   if (!workspace || workspaceCatalog.value.activeId === id) return;
-  if (workspaceCatalog.value.activeId && !(await saveCurrentWorkspace())) return;
-  const previousSnapshot = store.snapshot();
-  if (!store.restore(workspace.snapshot)) return;
-  const restoredWorkspace = { ...workspace, snapshot: store.snapshot() };
-  const next = setActiveWorkspace(upsertWorkspace(workspaceCatalog.value, restoredWorkspace), id);
-  if (!(await persistCatalog(next))) {
-    store.restore(previousSnapshot);
+  if (!workspaceOperation.begin('restore', id)) return;
+  if (!(await session.acquire(id))) {
+    workspaceOperation.finish();
     return;
   }
-  layoutRevision.value += 1;
+  let switched = false;
+  try {
+    if (workspaceCatalog.value.activeId && !(await saveCurrentWorkspace())) return;
+    workspaceMutationSuspended += 1;
+    try {
+      const previousSnapshot = store.snapshot();
+      if (!store.restore(workspace.snapshot)) return;
+      const restoredWorkspace = { ...workspace, snapshot: store.snapshot() };
+      const next = setActiveWorkspace(
+        upsertWorkspace(workspaceCatalog.value, restoredWorkspace),
+        id,
+      );
+      if (!(await persistCatalog(next))) {
+        store.restore(previousSnapshot);
+        return;
+      }
+      await session.claim(id);
+      switched = true;
+      layoutRevision.value += 1;
+    } finally {
+      workspaceMutationSuspended -= 1;
+    }
+  } finally {
+    if (!switched) await session.release(id);
+    workspaceOperation.finish();
+  }
 }
 
 async function deleteWorkspace(id: string) {
@@ -254,6 +307,7 @@ async function deleteWorkspace(id: string) {
   const wasActive = workspaceCatalog.value.activeId === id;
   if (!(await persistCatalog(removeWorkspace(workspaceCatalog.value, id)))) return;
   if (wasActive) {
+    await session.release(id);
     store.reset(store.panes[store.activeId]?.cwd ?? home.value ?? '/');
     layoutRevision.value += 1;
   }
@@ -265,12 +319,14 @@ function cancelClose() {
 
 async function finishClose(restore: boolean) {
   workspaceError.value = undefined;
+  if (workspaceOperation.busy) return;
   if (restore) {
     if (!(await saveCurrentWorkspace())) return;
   } else {
     const next = setActiveWorkspace(workspaceCatalog.value, null);
     if (!(await persistCatalog(next))) return;
   }
+  if (!(await session.releaseAll())) return;
   closePromptVisible.value = false;
   allowWindowClose = true;
   try {
@@ -328,6 +384,12 @@ onMounted(async () => {
   ready.value = true;
 });
 
+watch(
+  [() => store.root, () => store.panes, () => store.activeId],
+  () => persistActiveWorkspaceSnapshot(),
+  { deep: true },
+);
+
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown, true);
   unlistenClose?.();
@@ -345,6 +407,7 @@ onBeforeUnmount(() => {
         :active-id="workspaceCatalog.activeId"
         :workspaces="workspaceCatalog.workspaces"
         :error="workspaceError"
+        :busy="workspaceOperation.busy"
         @save="saveWorkspaceFromMenu"
         @new="openWorkspaceDialog('new')"
         @select="restoreWorkspace"

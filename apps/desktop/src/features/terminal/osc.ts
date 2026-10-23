@@ -1,5 +1,5 @@
 import { APP_AGENT_PREFIX, APP_COMMAND_PREFIX } from '../../core/brand.ts';
-import { isAgentProvider, isValidAgentSessionId, type AgentState } from '../workspace/agent.ts';
+import { isAgentProvider, normalizeAgentSessionId, type AgentState } from '../workspace/agent.ts';
 
 // OSC 7 payload ("file://host/path") → absolute path, or null if invalid.
 // Any program output can emit OSC 7, so only reports for this machine's
@@ -43,5 +43,6 @@ export function parseZuTermAgent(payload: string): AgentState | null | undefined
   const [provider, sessionId, ...extra] = value.split('|');
   if (!isAgentProvider(provider) || extra.length > 0) return null;
   if (sessionId === undefined) return { provider };
-  return isValidAgentSessionId(sessionId) ? { provider, sessionId } : null;
+  const normalizedSessionId = normalizeAgentSessionId(sessionId);
+  return normalizedSessionId ? { provider, sessionId: normalizedSessionId } : null;
 }

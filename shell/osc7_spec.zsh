@@ -13,21 +13,28 @@ source "$here/osc7.zsh"
 check "osc7 encodes cwd as file URL" "$(_zu_term_osc7)" $'\e]7;file://'"${HOST}${${dir//\%/%25}// /%20}"$'\e\\'
 
 ZU_TERM_HISTORY_FILE="$dir/pane-history.zsh"
+echo "echo historic-command" > "$ZU_TERM_HISTORY_FILE"
 _zu_term_configure_history
 check "configures the pane-specific history file" "$HISTFILE" "$ZU_TERM_HISTORY_FILE"
+check "ensures HISTSIZE is at least 10000" "$(( HISTSIZE >= 10000 ))" "1"
+check "ensures SAVEHIST is at least 10000" "$(( SAVEHIST >= 10000 ))" "1"
+check "loads existing history events from HISTFILE" "$(fc -l | tail -1 | awk '{$1=""; sub(/^ /, ""); print}')" "echo historic-command"
 
 check "registers precmd hook" "${precmd_functions[(r)_zu_term_osc7]}" "_zu_term_osc7"
 check "registers chpwd hook" "${chpwd_functions[(r)_zu_term_osc7]}" "_zu_term_osc7"
 check "reports codex as the active command" "$(_zu_term_preexec 'codex --dangerously-skip')" $'\e]1337;ZuTermCommand=codex\e\\\e]1337;ZuTermAgent=codex\e\\'
 check "skips env assignments before the command" "$(_zu_term_preexec 'env FOO=bar claude')" $'\e]1337;ZuTermCommand=claude\e\\\e]1337;ZuTermAgent=claude\e\\'
 check "reports codex resume IDs" "$(_zu_term_preexec 'codex resume codex-123')" $'\e]1337;ZuTermCommand=codex\e\\\e]1337;ZuTermAgent=codex|codex-123\e\\'
+check "reports codex resume IDs wrapped in single quotes" "$(_zu_term_preexec "codex resume '01a164cb-0da6-7401-9c12-aa73e8a80bb7'")" $'\e]1337;ZuTermCommand=codex\e\\\e]1337;ZuTermAgent=codex|01a164cb-0da6-7401-9c12-aa73e8a80bb7\e\\'
+check "reports codex resume IDs wrapped in double quotes" "$(_zu_term_preexec 'codex resume "01a164cb-0da6-7401-9c12-aa73e8a80bb7"')" $'\e]1337;ZuTermCommand=codex\e\\\e]1337;ZuTermAgent=codex|01a164cb-0da6-7401-9c12-aa73e8a80bb7\e\\'
+check "reports codex --resume=ID with quotes" "$(_zu_term_preexec "codex --resume='01a164cb-0da6-7401-9c12-aa73e8a80bb7'")" $'\e]1337;ZuTermCommand=codex\e\\\e]1337;ZuTermAgent=codex|01a164cb-0da6-7401-9c12-aa73e8a80bb7\e\\'
 check "reports a new claude session without an ID" "$(_zu_term_preexec 'claude')" $'\e]1337;ZuTermCommand=claude\e\\\e]1337;ZuTermAgent=claude\e\\'
 check "reports kiro resume IDs" "$(_zu_term_preexec 'kiro-cli chat --resume-id kiro-123')" $'\e]1337;ZuTermCommand=kiro-cli\e\\\e]1337;ZuTermAgent=kiro|kiro-123\e\\'
 check "reports muse resume IDs" "$(_zu_term_preexec 'muse resume muse-123')" $'\e]1337;ZuTermCommand=muse\e\\\e]1337;ZuTermAgent=muse|muse-123\e\\'
 check "reports antigravity conversation IDs" "$(_zu_term_preexec 'agy --conversation conversation-123')" $'\e]1337;ZuTermCommand=agy\e\\\e]1337;ZuTermAgent=antigravity|conversation-123\e\\'
 check "starts antigravity without an explicit ID" "$(_zu_term_preexec 'agy --continue')" $'\e]1337;ZuTermCommand=agy\e\\\e]1337;ZuTermAgent=antigravity\e\\'
-check "clears agent metadata for a normal command" "$(_zu_term_preexec 'ls -la')" $'\e]1337;ZuTermCommand=ls\e\\\e]1337;ZuTermAgent=\e\\'
-check "clears command and agent metadata at the prompt" "$(_zu_term_precmd)" $'\e]1337;ZuTermCommand=\e\\\e]1337;ZuTermAgent=\e\\'
+check "preserves agent metadata on a normal command" "$(_zu_term_preexec 'ls -la')" $'\e]1337;ZuTermCommand=ls\e\\'
+check "clears only command metadata at the prompt" "$(_zu_term_precmd)" $'\e]1337;ZuTermCommand=\e\\'
 
 rm -rf "${dir:h}"
 exit $failed

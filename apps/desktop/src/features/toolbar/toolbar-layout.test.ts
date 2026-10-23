@@ -24,6 +24,7 @@ test('mantiene el agente, nombre y carpeta en la cabecera de cada split', async 
 });
 
 test('mantiene guardar, nuevo y restaurar dentro del menú principal de workspace', async () => {
+  const appSource = await readFile(new URL('../../App.vue', import.meta.url), 'utf8');
   const workspaceMenuSource = await readFile(
     new URL('../workspace/WorkspaceMenu.vue', import.meta.url),
     'utf8',
@@ -34,6 +35,9 @@ test('mantiene guardar, nuevo y restaurar dentro del menú principal de workspac
   assert.match(workspaceMenuSource, /Guardar workspace/);
   assert.match(workspaceMenuSource, /Nuevo workspace/);
   assert.match(workspaceMenuSource, /Restaurar workspace/);
+  assert.match(appSource, /useWorkspaceOperationStore/);
+  assert.match(appSource, /workspaceOperation\.begin\('restore'/);
+  assert.match(workspaceMenuSource, /:disabled="busy"/);
   assert.doesNotMatch(workspaceMenuSource, /workspace-quick-actions/);
 });
 
