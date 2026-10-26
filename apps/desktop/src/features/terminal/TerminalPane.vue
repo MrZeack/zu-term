@@ -6,6 +6,7 @@ import { UI_DENSITY } from '../../core/ui-density.ts';
 import { buildAgentResumeCommand, type AgentState } from '../workspace/agent.ts';
 import { parseOsc7, parseZuTermAgent, parseZuTermCommand } from './osc.ts';
 import { ptyClient } from './pty-client.ts';
+import { clampFontSize, resolveFontFamily } from './terminal-font.ts';
 import { terminals } from './terminal-registry.ts';
 import { deferUntilNextFrame } from './webgl-startup.ts';
 import { THEME_CHANGE_EVENT, terminalTheme, type ThemeName } from '../theme/theme.ts';
@@ -18,6 +19,8 @@ const props = defineProps<{
   active: boolean;
   localHost: string | undefined;
   theme: ThemeName;
+  fontFamily?: string | undefined;
+  fontSize?: number | undefined;
 }>();
 const emit = defineEmits<{
   cwd: [path: string];
@@ -32,8 +35,8 @@ const emit = defineEmits<{
 
 const host = useTemplateRef<HTMLDivElement>('host');
 const term = new Terminal({
-  fontFamily: 'Menlo, "DejaVu Sans Mono", "Liberation Mono", monospace',
-  fontSize: UI_DENSITY.terminalFontSize,
+  fontFamily: resolveFontFamily(props.fontFamily),
+  fontSize: props.fontSize ? clampFontSize(props.fontSize) : UI_DENSITY.terminalFontSize,
   cursorBlink: true,
   // Bounded per pane: up to 32 panes share the webview's memory.
   scrollback: 10_000,
@@ -143,6 +146,9 @@ onMounted(async () => {
     term.write(`\r\nNo se pudo iniciar la shell: ${String(error)}\r\n`);
   }
   if (props.active) term.focus();
+  document.fonts?.ready?.then(() => {
+    if (!unmounted) fit.fit();
+  });
 });
 
 watch(
@@ -156,6 +162,24 @@ watch(
   () => props.theme,
   (nextTheme) => {
     term.options.theme = terminalTheme(nextTheme);
+  },
+);
+
+watch(
+  () => props.fontFamily,
+  (nextFamily) => {
+    term.options.fontFamily = resolveFontFamily(nextFamily);
+    fit.fit();
+  },
+);
+
+watch(
+  () => props.fontSize,
+  (nextSize) => {
+    if (nextSize) {
+      term.options.fontSize = clampFontSize(nextSize);
+      fit.fit();
+    }
   },
 );
 

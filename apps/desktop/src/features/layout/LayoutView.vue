@@ -16,6 +16,8 @@ const props = defineProps<{
   home: string | undefined;
   localHost: string | undefined;
   theme: ThemeName;
+  fontFamily?: string | undefined;
+  fontSize?: number | undefined;
 }>();
 const emit = defineEmits<{
   menu: [paneId: string, position: ContextMenuPosition];
@@ -243,6 +245,8 @@ const dropPreviewRect = computed<Rect | null>(() => {
         :active="store.activeId === id && store.renamingId !== id"
         :local-host="props.localHost"
         :theme="props.theme"
+        :font-family="props.fontFamily"
+        :font-size="props.fontSize"
         @cwd="(path) => store.setCwd(id, path)"
         @size="(cols, rows) => emit('size', id, cols, rows)"
         @title="(title) => store.setTitle(id, title)"

@@ -24,6 +24,15 @@ import {
   splitToolbarActions,
   type SplitToolbarAction,
 } from './features/toolbar/toolbar-actions.ts';
+import FontMenu from './features/toolbar/FontMenu.vue';
+import {
+  clampFontSize,
+  DEFAULT_TERMINAL_FONT_ID,
+  DEFAULT_TERMINAL_FONT_SIZE,
+  MAX_TERMINAL_FONT_SIZE,
+  MIN_TERMINAL_FONT_SIZE,
+  type TerminalFontId,
+} from './features/terminal/terminal-font.ts';
 import {
   THEME_CHANGE_EVENT,
   loadTheme,
@@ -55,6 +64,8 @@ const home = ref<string>();
 const localHost = ref<string>();
 const ready = ref(false);
 const theme = ref<ThemeName>('cyan');
+const fontFamily = ref<TerminalFontId>(DEFAULT_TERMINAL_FONT_ID);
+const fontSize = ref<number>(DEFAULT_TERMINAL_FONT_SIZE);
 const closePromptVisible = ref(false);
 const workspaceCatalog = ref<WorkspaceCatalog>(createWorkspaceCatalog());
 const workspaceDialogVisible = ref(false);
@@ -124,6 +135,28 @@ const session = createWorkspaceSession({
 });
 
 function onKeydown(event: KeyboardEvent) {
+  const mod = isMac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+  if (mod && !event.altKey) {
+    if (event.key === '=' || event.key === '+') {
+      event.preventDefault();
+      event.stopPropagation();
+      increaseFontSize();
+      return;
+    }
+    if (event.key === '-' || event.key === '_') {
+      event.preventDefault();
+      event.stopPropagation();
+      decreaseFontSize();
+      return;
+    }
+    if (event.key === '0') {
+      event.preventDefault();
+      event.stopPropagation();
+      resetFontSize();
+      return;
+    }
+  }
+
   const action = shortcutAction(event, isMac);
   if (!action) return;
   event.preventDefault();
@@ -142,19 +175,50 @@ function openMenu(paneId: string, position: ContextMenuPosition) {
   ).catch(report);
 }
 
-function persistConfig(catalog: WorkspaceCatalog, nextTheme: ThemeName): Promise<boolean> {
-  return session.persist(JSON.stringify(createConfigFile(nextTheme, catalog)));
+function persistConfig(
+  catalog: WorkspaceCatalog,
+  nextTheme: ThemeName,
+  nextFontId: TerminalFontId = fontFamily.value,
+  nextFontSize: number = fontSize.value,
+): Promise<boolean> {
+  return session.persist(
+    JSON.stringify(createConfigFile(nextTheme, catalog, nextFontId, nextFontSize)),
+  );
 }
 
 async function setTheme(next: ThemeName) {
   theme.value = next;
   document.documentElement.dataset.theme = next;
-  await persistConfig(workspaceCatalog.value, next);
+  await persistConfig(workspaceCatalog.value, next, fontFamily.value, fontSize.value);
   window.dispatchEvent(new CustomEvent<ThemeName>(THEME_CHANGE_EVENT, { detail: next }));
 }
 
 function toggleTheme() {
   void setTheme(nextTheme(theme.value));
+}
+
+async function setFontFamily(next: TerminalFontId) {
+  fontFamily.value = next;
+  await persistConfig(workspaceCatalog.value, theme.value, next, fontSize.value);
+}
+
+async function setFontSize(next: number) {
+  const clamped = clampFontSize(next);
+  if (clamped === fontSize.value) return;
+  fontSize.value = clamped;
+  await persistConfig(workspaceCatalog.value, theme.value, fontFamily.value, clamped);
+}
+
+function increaseFontSize() {
+  void setFontSize(fontSize.value + 1);
+}
+
+function decreaseFontSize() {
+  void setFontSize(fontSize.value - 1);
+}
+
+function resetFontSize() {
+  void setFontSize(DEFAULT_TERMINAL_FONT_SIZE);
 }
 
 function runToolbarAction(action: SplitToolbarAction['id']) {
@@ -365,6 +429,8 @@ onMounted(async () => {
     }
     const config = parseConfigFile(rawConfig);
     theme.value = config?.theme ?? loadTheme(window.localStorage);
+    fontFamily.value = config?.fontFamily ?? DEFAULT_TERMINAL_FONT_ID;
+    fontSize.value = config?.fontSize ?? DEFAULT_TERMINAL_FONT_SIZE;
     document.documentElement.dataset.theme = theme.value;
     home.value = homePath;
     localHost.value = hostname;
@@ -374,9 +440,9 @@ onMounted(async () => {
     workspaceCatalog.value = startupCatalog;
     store.init(launchCwd ?? homePath);
     if (configRead && !config) {
-      void persistConfig(startupCatalog, theme.value);
+      void persistConfig(startupCatalog, theme.value, fontFamily.value, fontSize.value);
     } else if (configRead && catalog.activeId !== null) {
-      void persistConfig(startupCatalog, theme.value);
+      void persistConfig(startupCatalog, theme.value, fontFamily.value, fontSize.value);
     }
   } catch (error) {
     report(error);
@@ -414,6 +480,35 @@ onBeforeUnmount(() => {
         @delete="deleteWorkspace"
       />
       <div class="toolbar-spacer" />
+      <FontMenu :model-value="fontFamily" @update:model-value="setFontFamily" />
+      <div class="font-size-control" role="group" aria-label="Tamaño de fuente de terminal">
+        <button
+          class="font-size-btn"
+          type="button"
+          :disabled="fontSize <= MIN_TERMINAL_FONT_SIZE"
+          aria-label="Disminuir tamaño de fuente"
+          :title="`Disminuir tamaño de fuente (${isMac ? '⌘-' : 'Ctrl+-'})`"
+          @click="decreaseFontSize"
+        >
+          <span aria-hidden="true">−</span>
+        </button>
+        <span
+          class="font-size-value"
+          :title="`Tamaño de fuente: ${fontSize}px (${isMac ? '⌘0' : 'Ctrl+0'} restablecer)`"
+        >
+          {{ fontSize }}px
+        </span>
+        <button
+          class="font-size-btn"
+          type="button"
+          :disabled="fontSize >= MAX_TERMINAL_FONT_SIZE"
+          aria-label="Aumentar tamaño de fuente"
+          :title="`Aumentar tamaño de fuente (${isMac ? '⌘+' : 'Ctrl++'})`"
+          @click="increaseFontSize"
+        >
+          <span aria-hidden="true">+</span>
+        </button>
+      </div>
       <nav class="toolbar-actions" aria-label="Acciones de split">
         <button
           v-for="action in splitActions"
@@ -451,6 +546,8 @@ onBeforeUnmount(() => {
       :home="home"
       :local-host="localHost"
       :theme="theme"
+      :font-family="fontFamily"
+      :font-size="fontSize"
       @menu="openMenu"
       @size="onPaneSize"
       @exit="(paneId) => actions.run('close', paneId).catch(report)"
@@ -557,6 +654,61 @@ onBeforeUnmount(() => {
 
 .toolbar-spacer {
   flex: 1;
+}
+
+.font-size-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 3px;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  background: var(--header-bg);
+}
+
+.font-size-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text);
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
+}
+
+.font-size-btn:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.font-size-btn:focus-visible {
+  outline: 2px solid var(--accent-alt);
+  outline-offset: 1px;
+}
+
+.font-size-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.font-size-value {
+  min-width: 32px;
+  padding: 0 3px;
+  color: var(--text);
+  font-family: Menlo, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  text-align: center;
+  user-select: none;
 }
 
 .toolbar-actions {

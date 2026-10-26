@@ -79,7 +79,29 @@ test('pasa el historial estable de cada pane al proceso de la PTY', async () => 
   );
 
   assert.match(layoutSource, /:theme="props\.theme"/);
+  assert.match(layoutSource, /:font-family="props\.fontFamily"/);
+  assert.match(layoutSource, /:font-size="props\.fontSize"/);
   assert.match(terminalSource, /historyId/);
   assert.match(terminalSource, /theme: ThemeName/);
+  assert.match(terminalSource, /fontFamily\?: string/);
+  assert.match(terminalSource, /fontSize\?: number/);
   assert.match(clientSource, /historyId/);
+});
+
+test('incorpora selector de tipografía y controles de tamaño en la barra global', async () => {
+  const appSource = await readFile(new URL('../../App.vue', import.meta.url), 'utf8');
+  const fontMenuSource = await readFile(new URL('./FontMenu.vue', import.meta.url), 'utf8');
+
+  assert.match(appSource, /<FontMenu/);
+  assert.match(appSource, /class="font-size-control"/);
+  assert.match(appSource, /class="font-size-btn"/);
+  assert.match(appSource, /increaseFontSize/);
+  assert.match(appSource, /decreaseFontSize/);
+  assert.match(appSource, /resetFontSize/);
+
+  assert.match(fontMenuSource, /class="font-menu"/);
+  assert.match(fontMenuSource, /class="font-popover"/);
+  assert.match(fontMenuSource, /TERMINAL_FONTS/);
+  assert.match(fontMenuSource, /document\.addEventListener\('pointerdown'/);
+  assert.match(fontMenuSource, /document\.removeEventListener\('pointerdown'/);
 });
