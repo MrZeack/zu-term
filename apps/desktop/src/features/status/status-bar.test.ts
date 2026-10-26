@@ -23,10 +23,13 @@ test('monta la barra de estado debajo del layout y recibe el tamaño de la PTY',
 
   assert.match(appSource, /<StatusBar/);
   assert.match(appSource, /terminalSizes/);
+  assert.match(appSource, /:run-processes="runProcesses"/);
   assert.match(layoutSource, /@size=/);
   assert.match(terminalSource, /size: \[cols: number, rows: number\]/);
   assert.match(terminalSource, /term\.onResize/);
   assert.match(statusSource, /role="status"/);
   assert.match(statusSource, /workspaceName/);
   assert.match(statusSource, /formatTerminalSize/);
+  assert.match(statusSource, /status-run/);
+  assert.match(statusSource, /runProcesses/);
 });

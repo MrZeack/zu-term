@@ -17,6 +17,8 @@ import { createPaneActions } from './features/pane-actions/pane-actions.ts';
 import { paneTitle, shortPath } from './features/pane-header/pane-title.ts';
 import { shortcutAction } from './features/shortcuts/shortcuts.ts';
 import StatusBar from './features/status/StatusBar.vue';
+import { runProcessesClient } from './features/status/run-processes-client.ts';
+import type { RunProcessInfo } from './features/status/run-processes.ts';
 import type { StatusPane } from './features/status/status.ts';
 import { initialCwd, localHostname } from './features/terminal/pty-client.ts';
 import { terminals } from './features/terminal/terminal-registry.ts';
@@ -93,6 +95,31 @@ const statusPane = computed<StatusPane | undefined>(() => {
     ...(size ? { cols: size.cols, rows: size.rows } : {}),
   };
 });
+const runProcesses = ref<RunProcessInfo[]>([]);
+const activeCwds = computed(() => {
+  const set = new Set<string>();
+  for (const pane of Object.values(store.panes)) {
+    if (pane.cwd) {
+      set.add(pane.cwd);
+    }
+  }
+  return Array.from(set);
+});
+
+async function refreshRunProcesses() {
+  const cwds = activeCwds.value;
+  if (cwds.length === 0) {
+    runProcesses.value = [];
+    return;
+  }
+  try {
+    runProcesses.value = await runProcessesClient.detect(cwds);
+  } catch {
+    runProcesses.value = [];
+  }
+}
+
+let runProcessesTimer: ReturnType<typeof setInterval> | undefined;
 const workspaceDialogTitle = computed(() =>
   workspaceDialogMode.value === 'new' ? 'Nuevo workspace' : 'Guardar workspace',
 );
@@ -444,10 +471,18 @@ onMounted(async () => {
     } else if (configRead && catalog.activeId !== null) {
       void persistConfig(startupCatalog, theme.value, fontFamily.value, fontSize.value);
     }
+    ready.value = true;
+    void refreshRunProcesses();
+    runProcessesTimer = setInterval(() => {
+      void refreshRunProcesses();
+    }, 3000);
   } catch (error) {
     report(error);
   }
-  ready.value = true;
+});
+
+watch(activeCwds, () => {
+  void refreshRunProcesses();
 });
 
 watch(
@@ -457,6 +492,9 @@ watch(
 );
 
 onBeforeUnmount(() => {
+  if (runProcessesTimer) {
+    clearInterval(runProcessesTimer);
+  }
   window.removeEventListener('keydown', onKeydown, true);
   unlistenClose?.();
 });
@@ -553,7 +591,13 @@ onBeforeUnmount(() => {
       @exit="(paneId) => actions.run('close', paneId).catch(report)"
       @paste="(paneId, text) => actions.pasteText(paneId, text).catch(report)"
     />
-    <StatusBar :workspace-name="activeWorkspaceName" :pane="statusPane" :pane-count="paneCount" />
+    <StatusBar
+      :workspace-name="activeWorkspaceName"
+      :pane="statusPane"
+      :pane-count="paneCount"
+      :run-processes="runProcesses"
+      :home="home"
+    />
     <div
       v-if="closePromptVisible"
       class="modal-backdrop"

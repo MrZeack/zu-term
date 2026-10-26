@@ -1,5 +1,11 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import { UI_DENSITY } from '../../core/ui-density.ts';
+import {
+  formatRunProcessesSummary,
+  formatRunProcessesTooltip,
+  type RunProcessInfo,
+} from './run-processes.ts';
 import {
   agentStatusLabel,
   formatTerminalSize,
@@ -11,12 +17,17 @@ const props = defineProps<{
   workspaceName: string | undefined;
   pane: StatusPane | undefined;
   paneCount: number;
+  runProcesses?: RunProcessInfo[] | undefined;
+  home?: string | undefined;
 }>();
 
 const densityStyle = {
   '--status-bar-height': `${UI_DENSITY.statusBarHeight}px`,
   '--status-bar-font-size': `${UI_DENSITY.statusBarFontSize}px`,
 };
+
+const runLabel = computed(() => formatRunProcessesSummary(props.runProcesses ?? []));
+const runTooltip = computed(() => formatRunProcessesTooltip(props.runProcesses ?? [], props.home));
 </script>
 
 <template>
@@ -43,6 +54,18 @@ const densityStyle = {
       <span class="status-item">
         {{ props.paneCount }} split{{ props.paneCount === 1 ? '' : 's' }}
       </span>
+      <template v-if="runLabel">
+        <span class="status-divider" aria-hidden="true" />
+        <span
+          class="status-item status-run"
+          :title="runTooltip"
+          role="status"
+          aria-label="Procesos en segundo plano"
+        >
+          <span class="status-run-dot" aria-hidden="true" />
+          <strong class="status-run-label">{{ runLabel }}</strong>
+        </span>
+      </template>
       <span class="status-item status-size">
         {{ formatTerminalSize(props.pane?.cols, props.pane?.rows) }}
       </span>
@@ -156,6 +179,32 @@ const densityStyle = {
   font-weight: 700;
 }
 
+.status-run {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--accent);
+  font-family: Menlo, monospace;
+  font-size: 9px;
+  font-weight: 700;
+  max-width: 240px;
+}
+
+.status-run-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-alt-soft);
+}
+
+.status-run-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .status-divider {
   width: 1px;
   height: 12px;
@@ -186,6 +235,10 @@ const densityStyle = {
 
   .status-workspace {
     max-width: 110px;
+  }
+
+  .status-run {
+    max-width: 130px;
   }
 }
 </style>

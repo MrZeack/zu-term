@@ -4,6 +4,7 @@ mod config;
 mod dock;
 mod host;
 mod pty;
+mod run_processes;
 mod workspace_lock;
 
 pub fn run() {
@@ -41,6 +42,7 @@ pub fn run() {
             pty::commands::pty_write,
             pty::commands::pty_resize,
             pty::commands::pty_kill,
+            run_processes::run_processes_detect,
         ])
         .run(tauri::generate_context!())
         .expect("error while running the application");

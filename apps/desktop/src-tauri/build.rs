@@ -11,6 +11,7 @@ const COMMANDS: &[&str] = &[
     "pty_write",
     "pty_resize",
     "pty_kill",
+    "run_processes_detect",
 ];
 
 fn main() {
