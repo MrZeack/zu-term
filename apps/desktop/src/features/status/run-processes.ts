@@ -15,8 +15,16 @@ export function formatRunProcessesSummary(processes: RunProcessInfo[]): string |
     if (!first) return undefined;
     return `.run: ${first.name} (${first.pid})`;
   }
-  const names = processes.map((p) => p.name).join(', ');
-  return `.run: ${processes.length} activos (${names})`;
+  if (processes.length <= 3) {
+    const items = processes.map((p) => `${p.name} (${p.pid})`).join(', ');
+    return `.run: ${items}`;
+  }
+  const items = processes
+    .slice(0, 2)
+    .map((p) => `${p.name} (${p.pid})`)
+    .join(', ');
+  const remaining = processes.length - 2;
+  return `.run: ${items} (+${remaining})`;
 }
 
 export function formatRunProcessesTooltip(

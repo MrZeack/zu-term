@@ -18,14 +18,22 @@ test('formatea el resumen de procesos en .run para la barra de estado', () => {
     { name: 'api', pid: 1200, projectDir: '/Users/zeack/project' },
     { name: 'web', pid: 1201, projectDir: '/Users/zeack/project' },
   ];
-  assert.equal(formatRunProcessesSummary(multiple), '.run: 2 activos (api, web)');
+  assert.equal(formatRunProcessesSummary(multiple), '.run: api (1200), web (1201)');
 
   const many: RunProcessInfo[] = [
     { name: 'auth', pid: 10, projectDir: '/app' },
     { name: 'db', pid: 20, projectDir: '/app' },
     { name: 'queue', pid: 30, projectDir: '/app' },
   ];
-  assert.equal(formatRunProcessesSummary(many), '.run: 3 activos (auth, db, queue)');
+  assert.equal(formatRunProcessesSummary(many), '.run: auth (10), db (20), queue (30)');
+
+  const overflow: RunProcessInfo[] = [
+    { name: 'auth', pid: 10, projectDir: '/app' },
+    { name: 'db', pid: 20, projectDir: '/app' },
+    { name: 'queue', pid: 30, projectDir: '/app' },
+    { name: 'worker', pid: 40, projectDir: '/app' },
+  ];
+  assert.equal(formatRunProcessesSummary(overflow), '.run: auth (10), db (20) (+2)');
 });
 
 test('genera el tooltip descriptivo con PIDs y rutas de proyectos', () => {

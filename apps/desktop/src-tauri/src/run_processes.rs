@@ -12,16 +12,20 @@ pub struct RunProcessInfo {
     pub project_dir: String,
 }
 
-/// Ascends from `start` to find the nearest project directory containing a `.run` directory.
-/// Halts if a repository boundary (`.git`) is reached without a `.run` folder.
+pub const RUN_DIRS: &[&str] = &[".run", ".runtime"];
+
+/// Ascends from `start` to find the nearest project directory containing a `.run` or `.runtime` directory.
+/// Halts if a repository boundary (`.git`) is reached without a `.run` or `.runtime` folder.
 pub fn find_project_root_with_run(start: &Path) -> Option<PathBuf> {
     let mut current =
         if start.is_file() { start.parent()?.to_path_buf() } else { start.to_path_buf() };
 
     loop {
-        let run_dir = current.join(".run");
-        if run_dir.is_dir() {
-            return Some(current);
+        for dir_name in RUN_DIRS {
+            let run_dir = current.join(dir_name);
+            if run_dir.is_dir() {
+                return Some(current);
+            }
         }
         if current.join(".git").exists() {
             break;
@@ -52,51 +56,55 @@ pub fn is_process_alive(_pid: u32) -> bool {
     false
 }
 
-/// Reads all `*.pid` files in `project_dir/.run` and returns information for all processes
-/// that are currently active.
+/// Reads all `*.pid` files in `project_dir/.run` and `project_dir/.runtime` and returns information
+/// for all processes that are currently active.
 pub fn scan_run_directory(project_dir: &Path) -> Vec<RunProcessInfo> {
-    let run_dir = project_dir.join(".run");
     let mut processes = Vec::new();
+    let mut seen_names = HashSet::new();
 
-    let entries = match fs::read_dir(&run_dir) {
-        Ok(entries) => entries,
-        Err(_) => return processes,
-    };
-
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if !path.is_file() {
-            continue;
-        }
-        let Some(file_name) = path.file_name().and_then(|n| n.to_str()) else {
-            continue;
-        };
-        if !file_name.ends_with(".pid") {
-            continue;
-        }
-        let Some(name) = file_name.strip_suffix(".pid") else {
-            continue;
-        };
-        if name.is_empty() {
-            continue;
-        }
-
-        let content = match fs::read_to_string(&path) {
-            Ok(content) => content,
+    for dir_name in RUN_DIRS {
+        let run_dir = project_dir.join(dir_name);
+        let entries = match fs::read_dir(&run_dir) {
+            Ok(entries) => entries,
             Err(_) => continue,
         };
 
-        let pid: u32 = match content.trim().parse() {
-            Ok(pid) if pid > 0 => pid,
-            _ => continue,
-        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+            let Some(file_name) = path.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            if !file_name.ends_with(".pid") {
+                continue;
+            }
+            let Some(name) = file_name.strip_suffix(".pid") else {
+                continue;
+            };
+            if name.is_empty() || seen_names.contains(name) {
+                continue;
+            }
 
-        if is_process_alive(pid) {
-            processes.push(RunProcessInfo {
-                name: name.to_string(),
-                pid,
-                project_dir: project_dir.to_string_lossy().into_owned(),
-            });
+            let content = match fs::read_to_string(&path) {
+                Ok(content) => content,
+                Err(_) => continue,
+            };
+
+            let pid: u32 = match content.trim().parse() {
+                Ok(pid) if pid > 0 => pid,
+                _ => continue,
+            };
+
+            if is_process_alive(pid) {
+                seen_names.insert(name.to_string());
+                processes.push(RunProcessInfo {
+                    name: name.to_string(),
+                    pid,
+                    project_dir: project_dir.to_string_lossy().into_owned(),
+                });
+            }
         }
     }
 
@@ -170,6 +178,21 @@ mod tests {
     }
 
     #[test]
+    fn finds_project_root_with_runtime_dir() {
+        let root = temp_test_dir("finds-runtime");
+        let runtime_dir = root.join(".runtime");
+        fs::create_dir_all(&runtime_dir).unwrap();
+
+        let sub = root.join("apps").join("api");
+        fs::create_dir_all(&sub).unwrap();
+
+        assert_eq!(find_project_root_with_run(&sub), Some(root.clone()));
+        assert_eq!(find_project_root_with_run(&root), Some(root.clone()));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn ignores_dirs_without_run_dir() {
         let root = temp_test_dir("no-run");
         assert_eq!(find_project_root_with_run(&root), None);
@@ -206,6 +229,24 @@ mod tests {
         let processes = scan_run_directory(&root);
         assert_eq!(processes.len(), 1);
         assert_eq!(processes[0].name, "desktop");
+        assert_eq!(processes[0].pid, my_pid);
+        assert_eq!(processes[0].project_dir, root.to_string_lossy());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn scans_runtime_directory_and_run_directory() {
+        let root = temp_test_dir("scan-runtime");
+        let runtime_dir = root.join(".runtime");
+        fs::create_dir_all(&runtime_dir).unwrap();
+
+        let my_pid = std::process::id();
+        fs::write(runtime_dir.join("api.pid"), format!("{my_pid}\n")).unwrap();
+
+        let processes = scan_run_directory(&root);
+        assert_eq!(processes.len(), 1);
+        assert_eq!(processes[0].name, "api");
         assert_eq!(processes[0].pid, my_pid);
         assert_eq!(processes[0].project_dir, root.to_string_lossy());
 

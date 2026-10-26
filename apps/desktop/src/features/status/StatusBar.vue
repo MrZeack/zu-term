@@ -187,7 +187,7 @@ const runTooltip = computed(() => formatRunProcessesTooltip(props.runProcesses ?
   font-family: Menlo, monospace;
   font-size: 9px;
   font-weight: 700;
-  max-width: 240px;
+  max-width: 420px;
 }
 
 .status-run-dot {

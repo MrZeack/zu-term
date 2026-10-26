@@ -101,8 +101,17 @@ const runProcesses = ref<RunProcessInfo[]>([]);
 const activeCwds = computed(() => {
   const set = new Set<string>();
   for (const pane of Object.values(store.panes)) {
-    if (pane.cwd) {
-      set.add(pane.cwd);
+    const dir = pane.cwd ?? pane.startCwd;
+    if (dir) {
+      set.add(dir);
+    }
+  }
+  for (const ws of workspaceCatalog.value.workspaces) {
+    for (const pane of Object.values(ws.snapshot.panes)) {
+      const dir = pane.cwd ?? pane.startCwd;
+      if (dir) {
+        set.add(dir);
+      }
     }
   }
   return Array.from(set);
