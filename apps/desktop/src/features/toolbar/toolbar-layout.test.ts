@@ -41,6 +41,17 @@ test('mantiene guardar, nuevo y restaurar dentro del menú principal de workspac
   assert.doesNotMatch(workspaceMenuSource, /workspace-quick-actions/);
 });
 
+test('amplía el menú desplegable de workspaces para aprovechar la altura de la ventana', async () => {
+  const workspaceMenuSource = await readFile(
+    new URL('../workspace/WorkspaceMenu.vue', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(workspaceMenuSource, /max-height:\s*calc\(100vh/);
+  assert.match(workspaceMenuSource, /width:\s*320px/);
+  assert.match(workspaceMenuSource, /overflow-y:\s*auto/);
+});
+
 test('cierra el menú de workspace al pulsar fuera y limpia el listener', async () => {
   const workspaceMenuSource = await readFile(
     new URL('../workspace/WorkspaceMenu.vue', import.meta.url),

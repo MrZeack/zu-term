@@ -7,7 +7,7 @@ export PATH := $(NODE_BIN_DIR):/opt/homebrew/opt/node@24/bin:/opt/homebrew/opt/r
 
 TAURI_DIR := apps/desktop/src-tauri
 
-.PHONY: env deps icons install uninstall up down restart logs status test lint typecheck audit build check bundle
+.PHONY: env deps icons install uninstall up down restart logs status test lint typecheck audit build check bundle bump
 
 env: ## Check tools, Node version and .env
 	@set -e; \
@@ -75,3 +75,6 @@ check: deps lint typecheck test audit build ## Everything above
 
 bundle: deps icons ## Build the installable app (.app/.dmg on macOS, .deb/.AppImage on Linux)
 	@cd apps/desktop && pnpm tauri build
+
+bump: ## Increment patch version across manifests and tests (make bump [TYPE=patch|minor|major])
+	@scripts/bump.sh $(or $(TYPE),patch)

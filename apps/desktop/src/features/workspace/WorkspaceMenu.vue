@@ -171,7 +171,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', closeOnOutside
 }
 
 .workspace-trigger strong {
-  max-width: 125px;
+  max-width: 140px;
   overflow: hidden;
   font-size: 10px;
   text-overflow: ellipsis;
@@ -190,7 +190,9 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', closeOnOutside
   left: 0;
   display: flex;
   flex-direction: column;
-  width: 250px;
+  width: 320px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - var(--toolbar-height, 36px) - 28px);
   padding: 8px;
   border: 1px solid var(--border-strong);
   border-radius: 12px;
@@ -248,7 +250,9 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', closeOnOutside
   display: flex;
   flex-direction: column;
   gap: 2px;
-  max-height: 260px;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: calc(100vh - 180px);
   margin-top: 6px;
   padding-top: 6px;
   border-top: 1px solid var(--border);
@@ -330,6 +334,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', closeOnOutside
   .workspace-popover {
     left: auto;
     right: 0;
+    width: 290px;
   }
 }
 </style>
