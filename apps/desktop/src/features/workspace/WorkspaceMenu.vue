@@ -15,6 +15,7 @@ const emit = defineEmits<{
   new: [];
   select: [id: string];
   delete: [id: string];
+  open: [];
 }>();
 
 const open = ref(false);
@@ -23,6 +24,13 @@ const activeName = computed(
   () =>
     props.workspaces.find((workspace) => workspace.id === props.activeId)?.name ?? 'Sin guardar',
 );
+
+function toggleOpen() {
+  open.value = !open.value;
+  if (open.value) {
+    emit('open');
+  }
+}
 
 function closeAnd(action: () => void) {
   open.value = false;
@@ -55,7 +63,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', closeOnOutside
       :aria-expanded="open"
       aria-label="Abrir menú principal de workspaces"
       title="Abrir menú principal de workspaces"
-      @click="open = !open"
+      @click="toggleOpen"
     >
       <span class="workspace-trigger__kicker">WORKSPACE</span>
       <strong>{{ activeName }}</strong>

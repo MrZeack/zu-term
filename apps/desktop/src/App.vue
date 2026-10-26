@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { homeDir } from '@tauri-apps/api/path';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { emit as tauriEmit, listen as tauriListen, type UnlistenFn } from '@tauri-apps/api/event';
 import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { ask } from '@tauri-apps/plugin-dialog';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
@@ -53,6 +54,7 @@ import {
   findWorkspace,
   loadWorkspaceCatalog,
   MAX_WORKSPACES,
+  reconcileWorkspaceCatalog,
   setActiveWorkspace,
   syncActiveWorkspace,
   upsertWorkspace,
@@ -134,7 +136,12 @@ const densityStyle = {
 };
 let allowWindowClose = false;
 let unlistenClose: (() => void) | undefined;
+let unlistenWorkspaces: UnlistenFn | undefined;
 let workspaceMutationSuspended = 0;
+
+function onWindowFocus() {
+  void reloadWorkspaces();
+}
 
 const actions = createPaneActions({
   store,
@@ -202,6 +209,33 @@ function openMenu(paneId: string, position: ContextMenuPosition) {
   ).catch(report);
 }
 
+const WORKSPACES_UPDATED_EVENT = 'zu-term://workspaces-updated';
+
+async function loadDiskCatalog(): Promise<WorkspaceCatalog | null> {
+  try {
+    const raw = await configClient.read();
+    const config = parseConfigFile(raw);
+    return config?.catalog ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function reloadWorkspaces(): Promise<boolean> {
+  const disk = await loadDiskCatalog();
+  if (!disk) return false;
+  workspaceCatalog.value = reconcileWorkspaceCatalog(workspaceCatalog.value, disk);
+  return true;
+}
+
+async function broadcastWorkspacesUpdated() {
+  try {
+    await tauriEmit(WORKSPACES_UPDATED_EVENT);
+  } catch {
+    // Continúa si el emisor de eventos no está disponible
+  }
+}
+
 function persistConfig(
   catalog: WorkspaceCatalog,
   nextTheme: ThemeName,
@@ -216,6 +250,7 @@ function persistConfig(
 async function setTheme(next: ThemeName) {
   theme.value = next;
   document.documentElement.dataset.theme = next;
+  await reloadWorkspaces();
   await persistConfig(workspaceCatalog.value, next, fontFamily.value, fontSize.value);
   window.dispatchEvent(new CustomEvent<ThemeName>(THEME_CHANGE_EVENT, { detail: next }));
 }
@@ -226,6 +261,7 @@ function toggleTheme() {
 
 async function setFontFamily(next: TerminalFontId) {
   fontFamily.value = next;
+  await reloadWorkspaces();
   await persistConfig(workspaceCatalog.value, theme.value, next, fontSize.value);
 }
 
@@ -233,6 +269,7 @@ async function setFontSize(next: number) {
   const clamped = clampFontSize(next);
   if (clamped === fontSize.value) return;
   fontSize.value = clamped;
+  await reloadWorkspaces();
   await persistConfig(workspaceCatalog.value, theme.value, fontFamily.value, clamped);
 }
 
@@ -260,6 +297,7 @@ async function persistCatalog(next: WorkspaceCatalog): Promise<boolean> {
   if (!(await persistConfig(next, theme.value))) return false;
   workspaceCatalog.value = next;
   workspaceError.value = undefined;
+  void broadcastWorkspacesUpdated();
   return true;
 }
 
@@ -271,6 +309,7 @@ function persistActiveWorkspaceSnapshot() {
 }
 
 async function saveCurrentWorkspace(name?: string): Promise<boolean> {
+  await reloadWorkspaces();
   const current = findWorkspace(workspaceCatalog.value, workspaceCatalog.value.activeId);
   if (!current && workspaceCatalog.value.workspaces.length >= MAX_WORKSPACES) {
     workspaceError.value = `Ya existen ${MAX_WORKSPACES} workspaces. Elimina uno antes de guardar otro.`;
@@ -312,6 +351,7 @@ async function saveWorkspaceFromMenu() {
 }
 
 async function createNewWorkspace(name: string): Promise<boolean> {
+  await reloadWorkspaces();
   if (workspaceCatalog.value.workspaces.length >= MAX_WORKSPACES) {
     workspaceError.value = `Ya existen ${MAX_WORKSPACES} workspaces. Elimina uno antes de crear otro.`;
     return false;
@@ -350,6 +390,7 @@ async function submitWorkspaceName(name: string) {
 }
 
 async function restoreWorkspace(id: string) {
+  await reloadWorkspaces();
   const workspace = findWorkspace(workspaceCatalog.value, id);
   if (!workspace || workspaceCatalog.value.activeId === id) return;
   if (!workspaceOperation.begin('restore', id)) return;
@@ -386,6 +427,7 @@ async function restoreWorkspace(id: string) {
 }
 
 async function deleteWorkspace(id: string) {
+  await reloadWorkspaces();
   const workspace = findWorkspace(workspaceCatalog.value, id);
   if (!workspace) return;
   const confirmed = await ask(`Se eliminará el workspace “${workspace.name}”.`, {
@@ -472,9 +514,18 @@ onMounted(async () => {
       void persistConfig(startupCatalog, theme.value, fontFamily.value, fontSize.value);
     }
     ready.value = true;
+    try {
+      unlistenWorkspaces = await tauriListen(WORKSPACES_UPDATED_EVENT, () => {
+        void reloadWorkspaces();
+      });
+    } catch (error) {
+      report(error);
+    }
+    window.addEventListener('focus', onWindowFocus);
     void refreshRunProcesses();
     runProcessesTimer = setInterval(() => {
       void refreshRunProcesses();
+      void reloadWorkspaces();
     }, 3000);
   } catch (error) {
     report(error);
@@ -496,7 +547,9 @@ onBeforeUnmount(() => {
     clearInterval(runProcessesTimer);
   }
   window.removeEventListener('keydown', onKeydown, true);
+  window.removeEventListener('focus', onWindowFocus);
   unlistenClose?.();
+  unlistenWorkspaces?.();
 });
 </script>
 
@@ -516,6 +569,7 @@ onBeforeUnmount(() => {
         @new="openWorkspaceDialog('new')"
         @select="restoreWorkspace"
         @delete="deleteWorkspace"
+        @open="reloadWorkspaces"
       />
       <div class="toolbar-spacer" />
       <FontMenu :model-value="fontFamily" @update:model-value="setFontFamily" />

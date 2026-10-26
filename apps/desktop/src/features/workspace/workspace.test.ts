@@ -12,6 +12,8 @@ import {
   saveWorkspaceCatalog,
   setActiveWorkspace,
   upsertWorkspace,
+  reconcileWorkspaceCatalog,
+  type WorkspaceCatalog,
   type WorkspaceStorage,
 } from './workspace.ts';
 
@@ -200,4 +202,73 @@ test('rechaza guardar un catálogo por encima del límite de workspaces', () => 
 
   assert.equal(saveWorkspaceCatalog(target, catalog), false);
   assert.equal(target.value, null);
+});
+
+test('reconcilia catálogos entre ventanas preservando el workspace activo y adoptando los nuevos de disco', () => {
+  const snapshot1 = createWorkspaceSnapshot(root, panes, 'pane-1');
+  const snapshot2 = createWorkspaceSnapshot(
+    { kind: 'pane', id: 'pane-x' },
+    { 'pane-x': { id: 'pane-x', cwd: '/Users/me/other' } },
+    'pane-x',
+  );
+
+  const localCatalog: WorkspaceCatalog = {
+    version: 1,
+    activeId: 'ws-1',
+    workspaces: [createWorkspaceRecord('ws-1', 'Proyecto Local', snapshot1, 200)],
+  };
+
+  const diskCatalog: WorkspaceCatalog = {
+    version: 1,
+    activeId: null,
+    workspaces: [
+      createWorkspaceRecord('ws-1', 'Proyecto Local', snapshot1, 100),
+      createWorkspaceRecord('ws-2', 'Proyecto Otra Ventana', snapshot2, 150),
+    ],
+  };
+
+  const reconciled = reconcileWorkspaceCatalog(localCatalog, diskCatalog);
+
+  assert.equal(reconciled.activeId, 'ws-1');
+  assert.equal(reconciled.workspaces.length, 2);
+  assert.equal(reconciled.workspaces[0]?.id, 'ws-1');
+  assert.equal(reconciled.workspaces[0]?.updatedAt, 200);
+  assert.equal(reconciled.workspaces[1]?.id, 'ws-2');
+  assert.equal(reconciled.workspaces[1]?.name, 'Proyecto Otra Ventana');
+});
+
+test('reconcilia cuando no hay workspace activo en la ventana actual', () => {
+  const snapshot = createWorkspaceSnapshot(root, panes, 'pane-1');
+  const localCatalog = createWorkspaceCatalog();
+  const diskCatalog: WorkspaceCatalog = {
+    version: 1,
+    activeId: 'ws-99',
+    workspaces: [createWorkspaceRecord('ws-1', 'Guardado', snapshot, 100)],
+  };
+
+  const reconciled = reconcileWorkspaceCatalog(localCatalog, diskCatalog);
+  assert.equal(reconciled.activeId, null);
+  assert.equal(reconciled.workspaces.length, 1);
+  assert.equal(reconciled.workspaces[0]?.id, 'ws-1');
+});
+
+test('elimina workspaces borrados en disco si no están activos en esta ventana', () => {
+  const snapshot = createWorkspaceSnapshot(root, panes, 'pane-1');
+  const localCatalog: WorkspaceCatalog = {
+    version: 1,
+    activeId: null,
+    workspaces: [
+      createWorkspaceRecord('ws-1', 'Borrado en otra ventana', snapshot, 100),
+      createWorkspaceRecord('ws-2', 'Conservado', snapshot, 120),
+    ],
+  };
+  const diskCatalog: WorkspaceCatalog = {
+    version: 1,
+    activeId: null,
+    workspaces: [createWorkspaceRecord('ws-2', 'Conservado', snapshot, 120)],
+  };
+
+  const reconciled = reconcileWorkspaceCatalog(localCatalog, diskCatalog);
+  assert.equal(reconciled.workspaces.length, 1);
+  assert.equal(reconciled.workspaces[0]?.id, 'ws-2');
 });

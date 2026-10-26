@@ -280,6 +280,35 @@ export function deleteWorkspace(catalog: WorkspaceCatalog, id: string): Workspac
   };
 }
 
+export function reconcileWorkspaceCatalog(
+  current: WorkspaceCatalog,
+  fromDisk: WorkspaceCatalog,
+): WorkspaceCatalog {
+  const activeId = current.activeId;
+  const activeWorkspace = activeId ? findWorkspace(current, activeId) : undefined;
+
+  const workspaces = fromDisk.workspaces.map((diskWorkspace) => {
+    if (activeWorkspace && diskWorkspace.id === activeId) {
+      if (activeWorkspace.updatedAt >= diskWorkspace.updatedAt) {
+        return activeWorkspace;
+      }
+    }
+    return diskWorkspace;
+  });
+
+  if (activeWorkspace && !workspaces.some((w) => w.id === activeId)) {
+    workspaces.push(activeWorkspace);
+  }
+
+  const nextActiveId = activeId && workspaces.some((w) => w.id === activeId) ? activeId : null;
+
+  return {
+    version: 1,
+    activeId: nextActiveId,
+    workspaces,
+  };
+}
+
 export function loadWorkspaceCatalog(storage: WorkspaceStorage): WorkspaceCatalog | null {
   let raw: string | null;
   try {
