@@ -3,8 +3,21 @@ import { test } from 'node:test';
 import {
   formatRunProcessesSummary,
   formatRunProcessesTooltip,
+  splitDirectories,
   type RunProcessInfo,
 } from './run-processes.ts';
+
+test('solo consulta la carpeta actual de cada split abierto, sin duplicados', () => {
+  assert.deepEqual(
+    splitDirectories({
+      a: { id: 'a', cwd: '/repo/api', startCwd: '/repo' },
+      b: { id: 'b', startCwd: '/repo/web' },
+      c: { id: 'c', cwd: '/repo/api' },
+      d: { id: 'd' },
+    }),
+    ['/repo/api', '/repo/web'],
+  );
+});
 
 test('formatea el resumen de procesos en .run para la barra de estado', () => {
   assert.equal(formatRunProcessesSummary([]), undefined);

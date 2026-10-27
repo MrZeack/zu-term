@@ -23,7 +23,7 @@ import {
 } from './features/shortcuts/shortcuts.ts';
 import StatusBar from './features/status/StatusBar.vue';
 import { runProcessesClient } from './features/status/run-processes-client.ts';
-import type { RunProcessInfo } from './features/status/run-processes.ts';
+import { splitDirectories, type RunProcessInfo } from './features/status/run-processes.ts';
 import type { StatusPane } from './features/status/status.ts';
 import { initialCwd, localHostname } from './features/terminal/pty-client.ts';
 import { terminals } from './features/terminal/terminal-registry.ts';
@@ -111,24 +111,7 @@ const statusPane = computed<StatusPane | undefined>(() => {
   };
 });
 const runProcesses = ref<RunProcessInfo[]>([]);
-const activeCwds = computed(() => {
-  const set = new Set<string>();
-  for (const pane of Object.values(store.panes)) {
-    const dir = pane.cwd ?? pane.startCwd;
-    if (dir) {
-      set.add(dir);
-    }
-  }
-  for (const ws of workspaceCatalog.value.workspaces) {
-    for (const pane of Object.values(ws.snapshot.panes)) {
-      const dir = pane.cwd ?? pane.startCwd;
-      if (dir) {
-        set.add(dir);
-      }
-    }
-  }
-  return Array.from(set);
-});
+const activeCwds = computed(() => splitDirectories(store.panes));
 
 async function refreshRunProcesses() {
   const cwds = activeCwds.value;

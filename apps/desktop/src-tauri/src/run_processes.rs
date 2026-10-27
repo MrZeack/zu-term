@@ -1,10 +1,11 @@
-use std::collections::HashSet;
-use std::fs;
+use std::collections::BTreeSet;
+use std::fs::{self, File};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct RunProcessInfo {
     pub name: String,
@@ -13,29 +14,10 @@ pub struct RunProcessInfo {
 }
 
 pub const RUN_DIRS: &[&str] = &[".run", ".runtime"];
-
-/// Ascends from `start` to find the nearest project directory containing a `.run` or `.runtime` directory.
-/// Halts if a repository boundary (`.git`) is reached without a `.run` or `.runtime` folder.
-pub fn find_project_root_with_run(start: &Path) -> Option<PathBuf> {
-    let mut current =
-        if start.is_file() { start.parent()?.to_path_buf() } else { start.to_path_buf() };
-
-    loop {
-        for dir_name in RUN_DIRS {
-            let run_dir = current.join(dir_name);
-            if run_dir.is_dir() {
-                return Some(current);
-            }
-        }
-        if current.join(".git").exists() {
-            break;
-        }
-        if !current.pop() {
-            break;
-        }
-    }
-    None
-}
+/// One `cwd` and one `startCwd` per pane, with up to 32 panes per window.
+pub const MAX_CWDS: usize = 64;
+const MAX_PATH_BYTES: usize = 4096;
+const MAX_PID_FILE_BYTES: u64 = 32;
 
 /// Checks if a PID corresponds to a running process on Unix.
 #[cfg(unix)]
@@ -56,53 +38,55 @@ pub fn is_process_alive(_pid: u32) -> bool {
     false
 }
 
-/// Reads all `*.pid` files in `project_dir/.run` and `project_dir/.runtime` and returns information
-/// for all processes that are currently active.
-pub fn scan_run_directory(project_dir: &Path) -> Vec<RunProcessInfo> {
+/// A real directory or file, never a symlink that could point elsewhere.
+fn is_real(path: &Path, directory: bool) -> bool {
+    fs::symlink_metadata(path).is_ok_and(|meta| {
+        let kind = meta.file_type();
+        !kind.is_symlink() && if directory { kind.is_dir() } else { kind.is_file() }
+    })
+}
+
+fn read_pid(path: &Path) -> Option<u32> {
+    let mut content = String::new();
+    File::open(path).ok()?.take(MAX_PID_FILE_BYTES + 1).read_to_string(&mut content).ok()?;
+    if content.len() as u64 > MAX_PID_FILE_BYTES {
+        return None;
+    }
+    content.trim().parse().ok().filter(|pid| *pid > 0)
+}
+
+/// Live processes from the `*.pid` files directly inside `cwd/.run` and
+/// `cwd/.runtime`. Parent directories are never searched.
+pub fn scan_run_directory(cwd: &Path) -> Vec<RunProcessInfo> {
     let mut processes = Vec::new();
-    let mut seen_names = HashSet::new();
+    let mut seen_names = BTreeSet::new();
 
     for dir_name in RUN_DIRS {
-        let run_dir = project_dir.join(dir_name);
-        let entries = match fs::read_dir(&run_dir) {
-            Ok(entries) => entries,
-            Err(_) => continue,
-        };
-
+        let run_dir = cwd.join(dir_name);
+        if !is_real(&run_dir, true) {
+            continue;
+        }
+        let Ok(entries) = fs::read_dir(&run_dir) else { continue };
         for entry in entries.flatten() {
             let path = entry.path();
-            if !path.is_file() {
+            let Some(name) = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .and_then(|n| n.strip_suffix(".pid"))
+                .filter(|n| !n.is_empty())
+            else {
+                continue;
+            };
+            if seen_names.contains(name) || !is_real(&path, false) {
                 continue;
             }
-            let Some(file_name) = path.file_name().and_then(|n| n.to_str()) else {
-                continue;
-            };
-            if !file_name.ends_with(".pid") {
-                continue;
-            }
-            let Some(name) = file_name.strip_suffix(".pid") else {
-                continue;
-            };
-            if name.is_empty() || seen_names.contains(name) {
-                continue;
-            }
-
-            let content = match fs::read_to_string(&path) {
-                Ok(content) => content,
-                Err(_) => continue,
-            };
-
-            let pid: u32 = match content.trim().parse() {
-                Ok(pid) if pid > 0 => pid,
-                _ => continue,
-            };
-
+            let Some(pid) = read_pid(&path) else { continue };
             if is_process_alive(pid) {
                 seen_names.insert(name.to_string());
                 processes.push(RunProcessInfo {
                     name: name.to_string(),
                     pid,
-                    project_dir: project_dir.to_string_lossy().into_owned(),
+                    project_dir: cwd.to_string_lossy().into_owned(),
                 });
             }
         }
@@ -112,172 +96,126 @@ pub fn scan_run_directory(project_dir: &Path) -> Vec<RunProcessInfo> {
     processes
 }
 
-/// Scans `.run` processes for each directory in `cwds`, deduplicating by project root.
+/// Scans the exact directories of the open splits: absolute, deduplicated
+/// and capped, so the UI can never trigger an unbounded filesystem walk.
 pub fn detect_run_processes_for_cwds(cwds: &[String]) -> Vec<RunProcessInfo> {
-    let mut project_roots = HashSet::new();
-
-    for cwd_str in cwds {
-        let trimmed = cwd_str.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-        let path = PathBuf::from(trimmed);
-        if let Some(root) = find_project_root_with_run(&path) {
-            project_roots.insert(root);
-        }
-    }
-
-    let mut all_processes = Vec::new();
-    for root in project_roots {
-        all_processes.extend(scan_run_directory(&root));
-    }
-
-    all_processes.sort_by(|a, b| {
-        a.project_dir
-            .cmp(&b.project_dir)
-            .then_with(|| a.name.cmp(&b.name))
-            .then_with(|| a.pid.cmp(&b.pid))
-    });
-
-    all_processes
+    let directories: BTreeSet<PathBuf> = cwds
+        .iter()
+        .take(MAX_CWDS)
+        .map(|cwd| cwd.trim())
+        .filter(|cwd| !cwd.is_empty() && cwd.len() <= MAX_PATH_BYTES)
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+        .collect();
+    directories.iter().flat_map(|directory| scan_run_directory(directory)).collect()
 }
 
+// Async so the filesystem scan runs off the main thread.
 #[tauri::command]
-pub fn run_processes_detect(cwds: Vec<String>) -> Vec<RunProcessInfo> {
+pub async fn run_processes_detect(cwds: Vec<String>) -> Vec<RunProcessInfo> {
     detect_run_processes_for_cwds(&cwds)
 }
 
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::path::PathBuf;
 
     use super::*;
+    use crate::config::test_dir;
 
-    fn temp_test_dir(label: &str) -> PathBuf {
-        let dir =
-            std::env::temp_dir().join(format!("zu-term-run-proc-{label}-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&dir);
+    fn project(label: &str) -> PathBuf {
+        let dir = test_dir(&format!("run-proc-{label}"));
         fs::create_dir_all(&dir).expect("create temp test dir");
         dir
     }
 
-    #[test]
-    fn finds_project_root_from_current_or_subdirs() {
-        let root = temp_test_dir("finds-root");
-        let run_dir = root.join(".run");
-        fs::create_dir_all(&run_dir).unwrap();
-
-        let sub = root.join("apps").join("desktop");
-        fs::create_dir_all(&sub).unwrap();
-
-        assert_eq!(find_project_root_with_run(&sub), Some(root.clone()));
-        assert_eq!(find_project_root_with_run(&root), Some(root.clone()));
-
-        let _ = fs::remove_dir_all(root);
+    fn cwd(path: &Path) -> String {
+        path.to_string_lossy().into_owned()
     }
 
     #[test]
-    fn finds_project_root_with_runtime_dir() {
-        let root = temp_test_dir("finds-runtime");
-        let runtime_dir = root.join(".runtime");
-        fs::create_dir_all(&runtime_dir).unwrap();
-
-        let sub = root.join("apps").join("api");
-        fs::create_dir_all(&sub).unwrap();
-
-        assert_eq!(find_project_root_with_run(&sub), Some(root.clone()));
-        assert_eq!(find_project_root_with_run(&root), Some(root.clone()));
-
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn ignores_dirs_without_run_dir() {
-        let root = temp_test_dir("no-run");
-        assert_eq!(find_project_root_with_run(&root), None);
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn stops_at_git_boundary() {
-        let root = temp_test_dir("git-boundary");
-        let git_dir = root.join(".git");
-        fs::create_dir_all(&git_dir).unwrap();
-
-        let sub = root.join("packages").join("shared");
-        fs::create_dir_all(&sub).unwrap();
-
-        assert_eq!(find_project_root_with_run(&sub), None);
-
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn scans_run_directory_filtering_stale_and_invalid_pids() {
-        let root = temp_test_dir("scan-run");
-        let run_dir = root.join(".run");
-        fs::create_dir_all(&run_dir).unwrap();
-
+    fn detects_live_pids_in_the_split_directory_run_and_runtime() {
+        let root = project("both");
+        fs::create_dir_all(root.join(".run")).unwrap();
+        fs::create_dir_all(root.join(".runtime")).unwrap();
         let my_pid = std::process::id();
-        fs::write(run_dir.join("desktop.pid"), format!("{my_pid}\n")).unwrap();
+        fs::write(root.join(".run/web.pid"), format!("{my_pid}\n")).unwrap();
+        fs::write(root.join(".runtime/api.pid"), format!("{my_pid}\n")).unwrap();
+
+        let processes = detect_run_processes_for_cwds(&[cwd(&root)]);
+        let names: Vec<_> = processes.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, ["api", "web"]);
+        assert!(processes.iter().all(|p| p.pid == my_pid && p.project_dir == cwd(&root)));
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn does_not_search_parent_directories() {
+        let root = project("no-ascend");
+        fs::create_dir_all(root.join(".run")).unwrap();
+        fs::write(root.join(".run/web.pid"), std::process::id().to_string()).unwrap();
+        let sub = root.join("apps/desktop");
+        fs::create_dir_all(&sub).unwrap();
+
+        assert!(detect_run_processes_for_cwds(&[cwd(&sub)]).is_empty());
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn ignores_stale_invalid_oversized_and_symlinked_pid_files() {
+        let root = project("filter");
+        let run_dir = root.join(".run");
+        fs::create_dir_all(&run_dir).unwrap();
+        let my_pid = std::process::id();
+        fs::write(run_dir.join("live.pid"), format!("{my_pid}\n")).unwrap();
         fs::write(run_dir.join("dead.pid"), "99999999\n").unwrap();
         fs::write(run_dir.join("garbage.pid"), "invalid_pid\n").unwrap();
-        fs::write(run_dir.join("not_pid.txt"), "123\n").unwrap();
-        fs::write(run_dir.join(".pid"), "123\n").unwrap();
+        fs::write(run_dir.join("huge.pid"), format!("{my_pid}{}", " ".repeat(64))).unwrap();
+        fs::write(run_dir.join("not_pid.txt"), format!("{my_pid}\n")).unwrap();
+        fs::write(run_dir.join(".pid"), format!("{my_pid}\n")).unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(run_dir.join("live.pid"), run_dir.join("link.pid")).unwrap();
 
-        let processes = scan_run_directory(&root);
-        assert_eq!(processes.len(), 1);
-        assert_eq!(processes[0].name, "desktop");
-        assert_eq!(processes[0].pid, my_pid);
-        assert_eq!(processes[0].project_dir, root.to_string_lossy());
+        let names: Vec<_> = scan_run_directory(&root).into_iter().map(|p| p.name).collect();
+        assert_eq!(names, ["live"]);
 
-        let _ = fs::remove_dir_all(root);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ignores_a_run_directory_that_is_a_symlink() {
+        let root = project("symlink-dir");
+        let elsewhere = project("symlink-target");
+        fs::write(elsewhere.join("web.pid"), std::process::id().to_string()).unwrap();
+        std::os::unix::fs::symlink(&elsewhere, root.join(".run")).unwrap();
+
+        assert!(scan_run_directory(&root).is_empty());
+
+        fs::remove_dir_all(root).unwrap();
+        fs::remove_dir_all(elsewhere).unwrap();
     }
 
     #[test]
-    fn scans_runtime_directory_and_run_directory() {
-        let root = temp_test_dir("scan-runtime");
-        let runtime_dir = root.join(".runtime");
-        fs::create_dir_all(&runtime_dir).unwrap();
+    fn deduplicates_and_skips_relative_empty_and_excess_paths() {
+        let root = project("dedup");
+        fs::create_dir_all(root.join(".run")).unwrap();
+        fs::write(root.join(".run/server.pid"), std::process::id().to_string()).unwrap();
 
-        let my_pid = std::process::id();
-        fs::write(runtime_dir.join("api.pid"), format!("{my_pid}\n")).unwrap();
-
-        let processes = scan_run_directory(&root);
-        assert_eq!(processes.len(), 1);
-        assert_eq!(processes[0].name, "api");
-        assert_eq!(processes[0].pid, my_pid);
-        assert_eq!(processes[0].project_dir, root.to_string_lossy());
-
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn detects_and_deduplicates_for_multiple_cwds() {
-        let root = temp_test_dir("dedup");
-        let run_dir = root.join(".run");
-        fs::create_dir_all(&run_dir).unwrap();
-
-        let my_pid = std::process::id();
-        fs::write(run_dir.join("server.pid"), format!("{my_pid}\n")).unwrap();
-
-        let sub1 = root.join("src");
-        let sub2 = root.join("tests");
-        fs::create_dir_all(&sub1).unwrap();
-        fs::create_dir_all(&sub2).unwrap();
-
-        let cwds = vec![
-            sub1.to_string_lossy().to_string(),
-            sub2.to_string_lossy().to_string(),
-            root.to_string_lossy().to_string(),
-        ];
-
-        let results = detect_run_processes_for_cwds(&cwds);
+        let results = detect_run_processes_for_cwds(&[
+            cwd(&root),
+            format!("  {}  ", cwd(&root)),
+            "relative/dir".into(),
+            String::new(),
+        ]);
         assert_eq!(results.len(), 1);
-        assert_eq!(results[0].name, "server");
-        assert_eq!(results[0].pid, my_pid);
 
-        let _ = fs::remove_dir_all(root);
+        let mut excess = vec!["/".to_string(); MAX_CWDS];
+        excess.push(cwd(&root));
+        assert!(detect_run_processes_for_cwds(&excess).is_empty());
+
+        fs::remove_dir_all(root).unwrap();
     }
 }

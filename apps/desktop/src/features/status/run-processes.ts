@@ -1,9 +1,21 @@
+import type { PaneState } from '../layout/layout.store.ts';
 import { shortPath } from '../pane-header/pane-title.ts';
 
 export interface RunProcessInfo {
   name: string;
   pid: number;
   projectDir: string;
+}
+
+// The current directory of each open split (or where it started). Only these
+// exact folders are checked for `.run`/`.runtime`; saved workspaces are not.
+export function splitDirectories(panes: Record<string, PaneState>): string[] {
+  const directories = new Set<string>();
+  for (const pane of Object.values(panes)) {
+    const directory = pane.cwd ?? pane.startCwd;
+    if (directory) directories.add(directory);
+  }
+  return [...directories];
 }
 
 export function formatRunProcessesSummary(processes: RunProcessInfo[]): string | undefined {
