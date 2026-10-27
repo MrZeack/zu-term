@@ -31,3 +31,26 @@ export function shortcutAction(event: KeyInput, isMac: boolean): PaneAction | nu
   if (!event.ctrlKey || !event.shiftKey || event.metaKey) return null;
   return LINUX[key] ?? null;
 }
+
+export function isQuitShortcut(event: KeyInput, isMac: boolean): boolean {
+  if (event.altKey && (event.key === 'F4' || event.key === 'f4')) {
+    return true;
+  }
+  if (event.altKey) return false;
+  const key = event.key.toLowerCase();
+  if (key !== 'q') return false;
+  if (isMac) {
+    return event.metaKey && !event.ctrlKey;
+  }
+  return event.ctrlKey && !event.metaKey;
+}
+
+export function isCloseWindowShortcut(event: KeyInput, isMac: boolean): boolean {
+  if (event.altKey) return false;
+  const key = event.key.toLowerCase();
+  if (key !== 'w') return false;
+  if (isMac) {
+    return event.metaKey && !event.ctrlKey && event.shiftKey;
+  }
+  return event.ctrlKey && !event.metaKey && event.shiftKey;
+}

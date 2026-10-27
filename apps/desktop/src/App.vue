@@ -4,7 +4,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { emit as tauriEmit, listen as tauriListen, type UnlistenFn } from '@tauri-apps/api/event';
 import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { ask } from '@tauri-apps/plugin-dialog';
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from 'vue';
 import { useLayoutStore, useWorkspaceOperationStore } from './core/app-stores.ts';
 import { APP_NAME, APP_VERSION } from './core/brand.ts';
 import { UI_DENSITY } from './core/ui-density.ts';
@@ -16,7 +16,11 @@ import type { ContextMenuPosition } from './features/context-menu/position.ts';
 import LayoutView from './features/layout/LayoutView.vue';
 import { createPaneActions } from './features/pane-actions/pane-actions.ts';
 import { paneTitle, shortPath } from './features/pane-header/pane-title.ts';
-import { shortcutAction } from './features/shortcuts/shortcuts.ts';
+import {
+  isCloseWindowShortcut,
+  isQuitShortcut,
+  shortcutAction,
+} from './features/shortcuts/shortcuts.ts';
 import StatusBar from './features/status/StatusBar.vue';
 import { runProcessesClient } from './features/status/run-processes-client.ts';
 import type { RunProcessInfo } from './features/status/run-processes.ts';
@@ -71,6 +75,15 @@ const theme = ref<ThemeName>('cyan');
 const fontFamily = ref<TerminalFontId>(DEFAULT_TERMINAL_FONT_ID);
 const fontSize = ref<number>(DEFAULT_TERMINAL_FONT_SIZE);
 const closePromptVisible = ref(false);
+const primaryCloseBtn = useTemplateRef<HTMLButtonElement>('primaryCloseBtn');
+
+watch(closePromptVisible, (visible) => {
+  if (visible) {
+    void nextTick(() => {
+      primaryCloseBtn.value?.focus();
+    });
+  }
+});
 const workspaceCatalog = ref<WorkspaceCatalog>(createWorkspaceCatalog());
 const workspaceDialogVisible = ref(false);
 const workspaceDialogMode = ref<'new' | 'save'>('new');
@@ -145,6 +158,7 @@ const densityStyle = {
 };
 let allowWindowClose = false;
 let unlistenClose: (() => void) | undefined;
+let unlistenRequestClose: UnlistenFn | undefined;
 let unlistenWorkspaces: UnlistenFn | undefined;
 let workspaceMutationSuspended = 0;
 
@@ -178,6 +192,20 @@ const session = createWorkspaceSession({
 });
 
 function onKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && closePromptVisible.value) {
+    event.preventDefault();
+    event.stopPropagation();
+    cancelClose();
+    return;
+  }
+
+  if (isQuitShortcut(event, isMac) || isCloseWindowShortcut(event, isMac)) {
+    event.preventDefault();
+    event.stopPropagation();
+    closePromptVisible.value = true;
+    return;
+  }
+
   const mod = isMac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
   if (mod && !event.altKey) {
     if (event.key === '=' || event.key === '+') {
@@ -488,6 +516,9 @@ onMounted(async () => {
       event.preventDefault();
       closePromptVisible.value = true;
     });
+    unlistenRequestClose = await tauriListen('zu-term://request-close', () => {
+      closePromptVisible.value = true;
+    });
   } catch (error) {
     report(error);
   }
@@ -558,6 +589,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown, true);
   window.removeEventListener('focus', onWindowFocus);
   unlistenClose?.();
+  unlistenRequestClose?.();
   unlistenWorkspaces?.();
 });
 </script>
@@ -688,6 +720,7 @@ onBeforeUnmount(() => {
             Cerrar sin guardar workspace
           </button>
           <button
+            ref="primaryCloseBtn"
             class="dialog-button dialog-button--primary"
             type="button"
             @click="finishClose(true)"

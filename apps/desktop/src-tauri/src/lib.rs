@@ -1,4 +1,4 @@
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 mod config;
 mod dock;
@@ -44,6 +44,19 @@ pub fn run() {
             pty::commands::pty_kill,
             run_processes::run_processes_detect,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running the application");
+        .build(tauri::generate_context!())
+        .expect("error while building the application")
+        .run(|app_handle, event| {
+            if let tauri::RunEvent::ExitRequested { api, .. } = event {
+                let windows = app_handle.webview_windows();
+                if !windows.is_empty() {
+                    api.prevent_exit();
+                    let _ = app_handle.emit("zu-term://request-close", ());
+                    for window in windows.values() {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
+                }
+            }
+        });
 }

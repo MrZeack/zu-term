@@ -1,6 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { shortcutAction, type KeyInput } from './shortcuts.ts';
+import {
+  isCloseWindowShortcut,
+  isQuitShortcut,
+  shortcutAction,
+  type KeyInput,
+} from './shortcuts.ts';
 
 const key = (k: string, mods: Partial<KeyInput> = {}): KeyInput => ({
   key: k,
@@ -37,4 +42,28 @@ test('plain typing and shell control keys are not intercepted', () => {
   assert.equal(shortcutAction(key('d', { ctrlKey: true }), false), null);
   assert.equal(shortcutAction(key('c', { ctrlKey: true }), false), null);
   assert.equal(shortcutAction(key('d', { metaKey: true, altKey: true }), true), null);
+});
+
+test('detecta atajos de salida/cierre de aplicación (CMD+Q, etc.)', () => {
+  assert.equal(isQuitShortcut(key('q', { metaKey: true }), true), true);
+  assert.equal(isQuitShortcut(key('Q', { metaKey: true }), true), true);
+  assert.equal(isQuitShortcut(key('Q', { metaKey: true, shiftKey: true }), true), true);
+  assert.equal(isQuitShortcut(key('q', { ctrlKey: true }), true), false);
+
+  assert.equal(isQuitShortcut(key('q', { ctrlKey: true }), false), true);
+  assert.equal(isQuitShortcut(key('Q', { ctrlKey: true, shiftKey: true }), false), true);
+  assert.equal(isQuitShortcut(key('F4', { altKey: true }), false), true);
+  assert.equal(isQuitShortcut(key('F4', { altKey: true }), true), true);
+
+  assert.equal(isQuitShortcut(key('q'), true), false);
+  assert.equal(isQuitShortcut(key('q', { metaKey: true, altKey: true }), true), false);
+});
+
+test('detecta atajos de cierre de ventana completa (CMD+SHIFT+W)', () => {
+  assert.equal(isCloseWindowShortcut(key('w', { metaKey: true, shiftKey: true }), true), true);
+  assert.equal(isCloseWindowShortcut(key('W', { metaKey: true, shiftKey: true }), true), true);
+  assert.equal(isCloseWindowShortcut(key('w', { metaKey: true }), true), false);
+
+  assert.equal(isCloseWindowShortcut(key('W', { ctrlKey: true, shiftKey: true }), false), true);
+  assert.equal(isCloseWindowShortcut(key('w'), true), false);
 });
