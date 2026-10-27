@@ -6,6 +6,7 @@ mod host;
 mod pty;
 mod run_processes;
 mod workspace_lock;
+mod workspace_store;
 
 pub fn run() {
     tauri::Builder::default()
@@ -26,13 +27,17 @@ pub fn run() {
         .setup(|app| {
             let paths = config::AppPaths::from_home(app.path().home_dir()?);
             app.manage(workspace_lock::WorkspaceLocks::new(&paths));
+            app.manage(workspace_store::ConfigStore::new(&paths));
             app.manage(paths);
             dock::install(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             config::config_read,
-            config::config_write,
+            workspace_store::config_import,
+            workspace_store::settings_save,
+            workspace_store::workspace_save,
+            workspace_store::workspace_delete,
             workspace_lock::workspace_lock_acquire,
             workspace_lock::workspace_lock_release,
             workspace_lock::workspace_lock_release_all,

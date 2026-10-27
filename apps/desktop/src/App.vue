@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { homeDir } from '@tauri-apps/api/path';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { emit as tauriEmit, listen as tauriListen, type UnlistenFn } from '@tauri-apps/api/event';
+import { listen as tauriListen, type UnlistenFn } from '@tauri-apps/api/event';
 import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { ask } from '@tauri-apps/plugin-dialog';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from 'vue';
 import { useLayoutStore, useWorkspaceOperationStore } from './core/app-stores.ts';
 import { APP_NAME, APP_VERSION } from './core/brand.ts';
 import { UI_DENSITY } from './core/ui-density.ts';
-import { configClient } from './features/config/config-client.ts';
+import { configClient, WORKSPACES_UPDATED_EVENT } from './features/config/config-client.ts';
 import { createConfigFile, parseConfigFile } from './features/config/config.ts';
 import { paneMenuItems } from './features/context-menu/menu-items.ts';
 import { showPaneMenu } from './features/context-menu/pane-menu.ts';
@@ -166,7 +166,7 @@ const actions = createPaneActions({
 const report = (error: unknown) => console.error(error);
 
 const session = createWorkspaceSession({
-  writeConfig: configClient.write,
+  store: configClient,
   locks: workspaceLockClient,
   onError: (message, error) => {
     workspaceError.value = message;
@@ -229,8 +229,6 @@ function openMenu(paneId: string, position: ContextMenuPosition) {
   ).catch(report);
 }
 
-const WORKSPACES_UPDATED_EVENT = 'zu-term://workspaces-updated';
-
 async function loadDiskCatalog(): Promise<WorkspaceCatalog | null> {
   try {
     const raw = await configClient.read();
@@ -248,30 +246,18 @@ async function reloadWorkspaces(): Promise<boolean> {
   return true;
 }
 
-async function broadcastWorkspacesUpdated() {
-  try {
-    await tauriEmit(WORKSPACES_UPDATED_EVENT);
-  } catch {
-    // Continúa si el emisor de eventos no está disponible
-  }
-}
-
-function persistConfig(
-  catalog: WorkspaceCatalog,
-  nextTheme: ThemeName,
-  nextFontId: TerminalFontId = fontFamily.value,
-  nextFontSize: number = fontSize.value,
-): Promise<boolean> {
-  return session.persist(
-    JSON.stringify(createConfigFile(nextTheme, catalog, nextFontId, nextFontSize)),
-  );
+function persistSettings(): Promise<boolean> {
+  return session.saveSettings({
+    theme: theme.value,
+    fontFamily: fontFamily.value,
+    fontSize: fontSize.value,
+  });
 }
 
 async function setTheme(next: ThemeName) {
   theme.value = next;
   document.documentElement.dataset.theme = next;
-  await reloadWorkspaces();
-  await persistConfig(workspaceCatalog.value, next, fontFamily.value, fontSize.value);
+  await persistSettings();
   window.dispatchEvent(new CustomEvent<ThemeName>(THEME_CHANGE_EVENT, { detail: next }));
 }
 
@@ -281,16 +267,14 @@ function toggleTheme() {
 
 async function setFontFamily(next: TerminalFontId) {
   fontFamily.value = next;
-  await reloadWorkspaces();
-  await persistConfig(workspaceCatalog.value, theme.value, next, fontSize.value);
+  await persistSettings();
 }
 
 async function setFontSize(next: number) {
   const clamped = clampFontSize(next);
   if (clamped === fontSize.value) return;
   fontSize.value = clamped;
-  await reloadWorkspaces();
-  await persistConfig(workspaceCatalog.value, theme.value, fontFamily.value, clamped);
+  await persistSettings();
 }
 
 function increaseFontSize() {
@@ -313,19 +297,21 @@ function onPaneSize(paneId: string, cols: number, rows: number) {
   terminalSizes.value[paneId] = { cols, rows };
 }
 
-async function persistCatalog(next: WorkspaceCatalog): Promise<boolean> {
-  if (!(await persistConfig(next, theme.value))) return false;
+// Saves the one workspace this window has open; `next` is the local catalog
+// once it is stored. The backend rejects any other workspace.
+async function persistWorkspace(id: string, next: WorkspaceCatalog): Promise<boolean> {
+  const workspace = findWorkspace(next, id);
+  if (!workspace || !(await session.saveWorkspace(workspace))) return false;
   workspaceCatalog.value = next;
   workspaceError.value = undefined;
-  void broadcastWorkspacesUpdated();
   return true;
 }
 
 function persistActiveWorkspaceSnapshot() {
   if (!ready.value || workspaceMutationSuspended > 0) return;
   const next = syncActiveWorkspace(workspaceCatalog.value, store.snapshot());
-  if (!next) return;
-  void persistCatalog(next);
+  if (!next?.activeId) return;
+  void persistWorkspace(next.activeId, next);
 }
 
 async function saveCurrentWorkspace(name?: string): Promise<boolean> {
@@ -345,7 +331,7 @@ async function saveCurrentWorkspace(name?: string): Promise<boolean> {
   );
   let next = upsertWorkspace(workspaceCatalog.value, workspace);
   next = setActiveWorkspace(next, id);
-  if (await persistCatalog(next)) {
+  if (await persistWorkspace(id, next)) {
     if (ownsNewLock) await session.claim(id);
     return true;
   }
@@ -388,7 +374,7 @@ async function createNewWorkspace(name: string): Promise<boolean> {
     const workspace = createWorkspaceRecord(id, name, store.snapshot());
     let next = upsertWorkspace(workspaceCatalog.value, workspace);
     next = setActiveWorkspace(next, workspace.id);
-    if (await persistCatalog(next)) {
+    if (await persistWorkspace(id, next)) {
       await session.claim(id);
       return true;
     }
@@ -430,7 +416,7 @@ async function restoreWorkspace(id: string) {
         upsertWorkspace(workspaceCatalog.value, restoredWorkspace),
         id,
       );
-      if (!(await persistCatalog(next))) {
+      if (!(await persistWorkspace(id, next))) {
         store.restore(previousSnapshot);
         return;
       }
@@ -458,9 +444,11 @@ async function deleteWorkspace(id: string) {
   });
   if (!confirmed) return;
   const wasActive = workspaceCatalog.value.activeId === id;
-  if (!(await persistCatalog(removeWorkspace(workspaceCatalog.value, id)))) return;
+  // The backend refuses if another window or instance has it open.
+  if (!(await session.deleteWorkspace(id))) return;
+  workspaceCatalog.value = removeWorkspace(workspaceCatalog.value, id);
+  workspaceError.value = undefined;
   if (wasActive) {
-    await session.release(id);
     store.reset(store.panes[store.activeId]?.cwd ?? home.value ?? '/');
     layoutRevision.value += 1;
   }
@@ -473,12 +461,9 @@ function cancelClose() {
 async function finishClose(restore: boolean) {
   workspaceError.value = undefined;
   if (workspaceOperation.busy) return;
-  if (restore) {
-    if (!(await saveCurrentWorkspace())) return;
-  } else {
-    const next = setActiveWorkspace(workspaceCatalog.value, null);
-    if (!(await persistCatalog(next))) return;
-  }
+  // The open workspace is window state (never persisted), so closing without
+  // saving only has to release its lock.
+  if (restore && !(await saveCurrentWorkspace())) return;
   if (!(await session.releaseAll())) return;
   closePromptVisible.value = false;
   allowWindowClose = true;
@@ -532,9 +517,15 @@ onMounted(async () => {
     workspaceCatalog.value = startupCatalog;
     store.init(launchCwd ?? homePath);
     if (configRead && !config) {
-      void persistConfig(startupCatalog, theme.value, fontFamily.value, fontSize.value);
-    } else if (configRead && catalog.activeId !== null) {
-      void persistConfig(startupCatalog, theme.value, fontFamily.value, fontSize.value);
+      // First run (or an unreadable file): store the migrated localStorage
+      // data; the backend never replaces a valid config.
+      const initial = createConfigFile(
+        theme.value,
+        startupCatalog,
+        fontFamily.value,
+        fontSize.value,
+      );
+      configClient.importConfig(JSON.stringify(initial)).catch(report);
     }
     ready.value = true;
     try {
@@ -546,10 +537,8 @@ onMounted(async () => {
     }
     window.addEventListener('focus', onWindowFocus);
     void refreshRunProcesses();
-    runProcessesTimer = setInterval(() => {
-      void refreshRunProcesses();
-      void reloadWorkspaces();
-    }, 3000);
+    // Workspace changes arrive through WORKSPACES_UPDATED_EVENT from the backend.
+    runProcessesTimer = setInterval(() => void refreshRunProcesses(), 3000);
   } catch (error) {
     report(error);
   }

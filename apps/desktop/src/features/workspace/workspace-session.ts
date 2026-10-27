@@ -1,5 +1,12 @@
+import type { ConfigSettings } from '../config/config-client.ts';
+import type { WorkspaceRecord } from './workspace.ts';
+
 export interface WorkspaceSessionDeps {
-  writeConfig(data: string): Promise<void>;
+  store: {
+    saveWorkspace(workspace: WorkspaceRecord): Promise<void>;
+    deleteWorkspace(workspaceId: string): Promise<boolean>;
+    saveSettings(settings: ConfigSettings): Promise<void>;
+  };
   locks: {
     acquire(workspaceId: string): Promise<boolean>;
     release(workspaceId: string): Promise<boolean>;
@@ -8,24 +15,62 @@ export interface WorkspaceSessionDeps {
   onError(message: string, error?: unknown): void;
 }
 
-// Window-side workspace state: config writes run one at a time, in order, and
-// the workspace whose lock this window holds is tracked in one place.
-export function createWorkspaceSession({ writeConfig, locks, onError }: WorkspaceSessionDeps) {
+// Window-side workspace state: writes run one at a time, in order, and the
+// workspace whose lock this window holds is tracked in one place. The backend
+// merges each write into config.json and only accepts saving the workspace
+// this window has open.
+export function createWorkspaceSession({ store, locks, onError }: WorkspaceSessionDeps) {
   let writeQueue: Promise<unknown> = Promise.resolve();
   let lockedId: string | null = null;
 
-  function persist(data: string): Promise<boolean> {
+  function enqueue<T>(task: () => Promise<T>, fallback: T, message: string): Promise<T> {
     const write = writeQueue.then(async () => {
       try {
-        await writeConfig(data);
-        return true;
+        return await task();
       } catch (error) {
-        onError('No se pudo guardar la configuración en ~/.config/zu-term.', error);
-        return false;
+        onError(message, error);
+        return fallback;
       }
     });
     writeQueue = write;
     return write;
+  }
+
+  function saveWorkspace(workspace: WorkspaceRecord): Promise<boolean> {
+    return enqueue(
+      async () => {
+        await store.saveWorkspace(workspace);
+        return true;
+      },
+      false,
+      'No se pudo guardar el workspace en ~/.config/zu-term.',
+    );
+  }
+
+  function saveSettings(settings: ConfigSettings): Promise<boolean> {
+    return enqueue(
+      async () => {
+        await store.saveSettings(settings);
+        return true;
+      },
+      false,
+      'No se pudo guardar la configuración en ~/.config/zu-term.',
+    );
+  }
+
+  async function deleteWorkspace(id: string): Promise<boolean> {
+    const deleted = await enqueue<boolean | null>(
+      () => store.deleteWorkspace(id),
+      null,
+      'No se pudo eliminar el workspace en ~/.config/zu-term.',
+    );
+    if (deleted === null) return false;
+    if (!deleted) {
+      onError('Ese workspace está abierto en otra ventana; ciérralo allí primero.');
+      return false;
+    }
+    if (lockedId === id) await release(id);
+    return true;
   }
 
   async function acquire(id: string): Promise<boolean> {
@@ -71,7 +116,9 @@ export function createWorkspaceSession({ writeConfig, locks, onError }: Workspac
   }
 
   return {
-    persist,
+    saveWorkspace,
+    saveSettings,
+    deleteWorkspace,
     acquire,
     release,
     claim,

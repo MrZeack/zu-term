@@ -49,9 +49,13 @@ test('App.vue configura eventos y sincronización reactiva de workspaces para m�
   const appSource = await readFile(new URL('../../App.vue', import.meta.url), 'utf8');
   const menuSource = await readFile(new URL('./WorkspaceMenu.vue', import.meta.url), 'utf8');
 
-  // Evento de broadcast
-  assert.match(appSource, /WORKSPACES_UPDATED_EVENT/);
-  assert.match(appSource, /tauriEmit\(WORKSPACES_UPDATED_EVENT\)/);
+  // El backend avisa a todas las ventanas tras escribir; la UI solo escucha.
+  const storeSource = await readFile(
+    new URL('../../../src-tauri/src/workspace_store.rs', import.meta.url),
+    'utf8',
+  );
+  assert.match(storeSource, /app\.emit\(WORKSPACES_UPDATED_EVENT/);
+  assert.doesNotMatch(appSource, /tauriEmit/);
   assert.match(appSource, /tauriListen\(WORKSPACES_UPDATED_EVENT/);
 
   // Recarga al enfocar ventana y al abrir menú

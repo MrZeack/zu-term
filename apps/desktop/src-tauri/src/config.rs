@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::{State, command};
 
 const CONFIG_DIR_NAME: &str = "zu-term";
-const CONFIG_FILE_NAME: &str = "config.json";
+pub(crate) const CONFIG_FILE_NAME: &str = "config.json";
 const HISTORY_DIR_NAME: &str = "history";
 const MAX_CONFIG_BYTES: usize = 4 * 1024 * 1024;
 const MAX_HISTORY_ID_BYTES: usize = 96;
@@ -78,7 +78,7 @@ pub(crate) fn history_file(
     Ok(Some(directory.join(format!("{history_id}.zsh_history"))))
 }
 
-fn read_config_in(directory: &Path) -> Result<Option<String>, String> {
+pub(crate) fn read_config_in(directory: &Path) -> Result<Option<String>, String> {
     let file = match File::open(directory.join(CONFIG_FILE_NAME)) {
         Ok(file) => file,
         Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
@@ -103,7 +103,7 @@ fn sync_dir(directory: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-fn write_config_in(directory: &Path, data: &str) -> Result<(), String> {
+pub(crate) fn write_config_in(directory: &Path, data: &str) -> Result<(), String> {
     if data.len() > MAX_CONFIG_BYTES {
         return Err("config file is too large".into());
     }
@@ -139,11 +139,6 @@ pub(crate) fn write_private_file(directory: &Path, name: &str, data: &str) -> Re
 #[command]
 pub fn config_read(paths: State<'_, AppPaths>) -> Result<Option<String>, String> {
     read_config_in(&paths.config)
-}
-
-#[command]
-pub fn config_write(paths: State<'_, AppPaths>, data: String) -> Result<(), String> {
-    write_config_in(&paths.config, &data)
 }
 
 #[cfg(test)]

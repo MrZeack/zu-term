@@ -70,7 +70,7 @@ El menú `WORKSPACE` permite guardar, crear, cambiar y eliminar workspaces. Cada
 
 Mientras un workspace se está restaurando, el estado global bloquea nuevas selecciones para evitar abrirlo dos veces por clics o eventos concurrentes.
 
-Cada workspace seleccionado queda bloqueado para la ventana que lo abrió; otra ventana o instancia no puede restaurarlo mientras siga abierto. Entre instancias se usa un lock del sistema sobre un archivo privado en `~/.config/zu-term/workspace-locks/`, que el sistema libera si Zu Term termina de forma abrupta. Al cerrar o destruir una ventana se liberan sus locks y se terminan sus shells.
+Un workspace solo puede estar abierto en una ventana: otra ventana o instancia no puede abrirlo ni eliminarlo mientras siga abierto, y cada ventana solo puede guardar el workspace que tiene abierto. El backend es el único que escribe `config.json` y aplica cada cambio sobre la versión actual del archivo, así que ninguna ventana sobrescribe los workspaces de otra. Entre instancias se usa un lock del sistema sobre un archivo privado en `~/.config/zu-term/workspace-locks/`, que el sistema libera si Zu Term termina de forma abrupta. Al cerrar o destruir una ventana se liberan sus locks y se terminan sus shells.
 
 Al iniciar Zu Term no se abre ningún workspace automáticamente: aparece una terminal nueva y el workspace se restaura solo cuando lo seleccionas explícitamente en el menú `WORKSPACE`.
 

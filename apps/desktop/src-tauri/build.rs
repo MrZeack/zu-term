@@ -1,7 +1,10 @@
 // App commands listed here are denied unless a capability grants them.
 const COMMANDS: &[&str] = &[
     "config_read",
-    "config_write",
+    "config_import",
+    "settings_save",
+    "workspace_save",
+    "workspace_delete",
     "workspace_lock_acquire",
     "workspace_lock_release",
     "workspace_lock_release_all",

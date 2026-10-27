@@ -34,7 +34,7 @@ fn valid_workspace_id(value: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
 }
 
-fn validate_workspace_id(value: &str) -> Result<(), String> {
+pub(crate) fn validate_workspace_id(value: &str) -> Result<(), String> {
     valid_workspace_id(value).then_some(()).ok_or_else(|| "invalid workspace id".into())
 }
 
@@ -43,7 +43,7 @@ impl WorkspaceLocks {
         Self::in_directory(paths.config.join(WORKSPACE_LOCK_DIR_NAME))
     }
 
-    fn in_directory(directory: PathBuf) -> Self {
+    pub(crate) fn in_directory(directory: PathBuf) -> Self {
         Self { directory, held: Mutex::default() }
     }
 
@@ -84,6 +84,11 @@ impl WorkspaceLocks {
             }
             None => Ok(true),
         }
+    }
+
+    /// Whether `owner` (a window of this process) holds the workspace.
+    pub fn is_held_by(&self, workspace_id: &str, owner: &str) -> Result<bool, String> {
+        Ok(self.held()?.get(workspace_id).is_some_and(|lock| lock.owner == owner))
     }
 
     pub fn release_all(&self, owner: &str) -> Result<(), String> {
