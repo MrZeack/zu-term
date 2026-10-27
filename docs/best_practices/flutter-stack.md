@@ -73,6 +73,6 @@ Aplica STACK-3 con pub:
 
 - Solo existen las carpetas de las plataformas distribuidas (`web/` incluida en las eliminables); la lista vive en `docs/ARCHITECTURE.md` y un test la fija para que `flutter create .` no las regenere sin aviso.
 - Identificador de la app (`applicationId`, bundle id) de la organización (`flutter create --org …`), nunca `com.example`.
-- La versión sale solo de `version:` en `pubspec.yaml` (`1.4.0+12`); CI comprueba que coincide con la etiqueta de release (FTEST-7). Seguridad por plataforma en [FSEC-5](flutter-security.md).
+- La versión sale solo de `version:` en `pubspec.yaml` (`1.4.0+12`); CI comprueba que coincide con la etiqueta de release (REL-4, FTEST-7). Seguridad por plataforma en [FSEC-5](flutter-security.md).
 
 **Comprobación:** `ls -d android ios linux macos windows web` solo lista las documentadas y `rg "com\.example"` en las carpetas nativas queda vacío.

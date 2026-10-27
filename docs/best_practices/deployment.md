@@ -29,7 +29,7 @@
 ## DEP-4. Publicación y recuperación
 
 - Revisa alcance; aprovisiona y verifica aislamiento; prepara [configuración](deployment-env.md); publica el workflow; ejecuta CI, migraciones y activación; comprueba salud.
-- Respeta las autorizaciones de commit y push. Verifica el workflow remoto antes de asumir autodespliegue.
+- Respeta las reglas de commit de AGENTS y la autorización de push. Verifica el workflow remoto antes de asumir autodespliegue.
 - Conserva la release anterior y su configuración. Diseña migraciones compatibles y ensaya restauraciones: recuperar código no revierte datos.
 
 **Comprobación:** artefacto, ejecución y release comparten SHA; un fallo controlado permite recuperar el servicio en un entorno de ensayo.

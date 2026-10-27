@@ -1,6 +1,6 @@
 # Stack de referencia
 
-**Leer cuando:** se inicie un proyecto sin stack indicado, se añadan o actualicen dependencias o se configuren TypeScript, ESLint o Prettier. En un proyecto existente se respeta su stack y STACK-3 a STACK-5 siguen aplicando. App nativa según [FLT](flutter-stack.md); carpetas según [STR](project-structure.md).
+**Leer cuando:** se inicie un proyecto sin stack indicado, se añadan o actualicen dependencias o se configuren TypeScript, ESLint o Prettier. En un proyecto existente se respeta su stack y STACK-3 a STACK-5 siguen aplicando. Usa solo las capas que el proyecto tiene: un CLI o una librería toma runtime, paquetes, lenguaje, build, pruebas y calidad, sin API, persistencia ni web; un CLI declara `bin` en `package.json` y compila con `tsup`. App nativa según [FLT](flutter-stack.md); carpetas según [STR](project-structure.md).
 
 ## STACK-1. Componentes
 

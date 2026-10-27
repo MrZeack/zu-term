@@ -2,6 +2,8 @@
 
 **Leer cuando:** se cree o modifique el Makefile, los scripts de arranque o parada, o la gestión de PIDs y logs. Implementa "Ejecución e infraestructura" de AGENTS con `ROOT_DIR`, `FRONTEND_PORT`, `BACKEND_PORT`, `DB_PORT`, `RUN_DIR=.run` y `LOG_DIR=logs`. Una app Flutter arranca con `flutter run --pid-file` ([FLT-2](flutter-stack.md)).
 
+**Aplicación:** MK-8 y MK-11 aplican a todo proyecto con Makefile. MK-1 a MK-7, MK-10 y MK-12 solo con servicios de larga duración (`make up`); MK-9 solo con Compose. Un CLI o una librería no tienen puertos, PIDs ni logs de servicio.
+
 ## MK-1. Preflight
 
 `make up` comprueba todas las herramientas (`node`, `pnpm`, `docker`, `lsof`, `curl`, `openssl`) y todos los puertos del proyecto antes de instalar, migrar o arrancar nada. Un puerto ocupado termina con código distinto de 0, mensaje claro y nada arrancado. Vite usa `--strictPort` para no cambiar de puerto en silencio.
@@ -49,8 +51,8 @@
 
 ## MK-8. Entorno antes de dependencias
 
-- Un target `env`, previo a `install`, `up`, `test`, `smoke` y `e2e`, comprueba `node`, `pnpm` y `docker`, que Node coincide con `.nvmrc` (≥ 24.8, STACK-1) y que `.env` existe o se crea (CFG-4), y aplica `chmod 600 .env`.
-- El Makefile exporta `E2E_TELEMETRY_DISABLED=1` (E2E-1); `make e2e` sigue E2E-9.
+- Un target `env`, previo a los demás targets existentes, comprueba las herramientas que el proyecto usa (`node`, `pnpm` y, con Compose, `docker`) y que Node coincide con `.nvmrc` (≥ 24.8, STACK-1). Si el proyecto usa `.env`, comprueba que existe o se crea (CFG-4) y aplica `chmod 600 .env`.
+- Con E2E, el Makefile exporta `E2E_TELEMETRY_DISABLED=1` (E2E-1) y `make e2e` sigue E2E-9.
 - Si hay una instalación fija de Node (p. ej. el keg `node@24` de Homebrew en `/opt/homebrew/opt/node@24/bin`), se antepone al `PATH` del Makefile sin modificar el Node global.
 
 ## MK-9. Datos persistentes
@@ -67,7 +69,7 @@
 
 ## MK-11. Test operativo
 
-`scripts/operations.test.sh`, en CI y antes de cerrar cambios del Makefile o scripts, falla si: falta `up`, `down`, `logs` o `status`; aparece `pkill` o `killall`; un script no pasa `bash -n`; Compose define algo más que recursos externos (p. ej. solo `db`); un puerto de Compose no está ligado a `127.0.0.1`; o `.env` no está ignorado o una migración sí lo está.
+`scripts/operations.test.sh`, en CI y antes de cerrar cambios del Makefile o scripts, falla si: falta algún target que AGENTS exige para el tipo de proyecto; aparece `pkill` o `killall`; un script no pasa `bash -n`; o `.env`, si existe, no está ignorado. Con Compose, falla además si define algo más que recursos externos (p. ej. solo `db`) o un puerto no está ligado a `127.0.0.1`; con migraciones, si alguna está ignorada.
 
 ## MK-12. Recuperación de DB
 

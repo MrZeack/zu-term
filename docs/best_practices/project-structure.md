@@ -2,6 +2,8 @@
 
 **Leer cuando:** se cree un proyecto, se añada una app, paquete o feature, se reorganicen carpetas o se escriba README y `docs/`. Monorepo TypeScript con pnpm; stack en [STACK](tech-stack.md).
 
+**Aplicación:** el monorepo (STR-1 a STR-4) aplica cuando hay varias apps o paquetes. Un CLI o una librería de un solo paquete usa en la raíz `package.json`, `Makefile`, `src/` organizado por feature (con el punto de entrada en `src/main.ts` o `src/cli.ts`), tests adyacentes (STR-5) y `docs/` (STR-6), sin `apps/` ni `packages/`. Crea solo las rutas de los componentes que existen.
+
 ## STR-1. Apps y paquetes
 
 | Ruta | Contenido |
@@ -14,7 +16,7 @@
 | `scripts/` | arranque, parada, estado, espera de health, preparación de DB y smoke |
 | `docs/` | arquitectura, una guía por feature y avance |
 
-- Raíz: `Makefile`, `docker-compose.yml`, `package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml`, `tsconfig.base.json`, `eslint.config.mjs`, `.prettierrc.json`, `.prettierignore`, `.editorconfig`, `.nvmrc` y `.env.example`.
+- Raíz: `Makefile`, `docker-compose.yml` (solo con recursos externos), `package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml`, `tsconfig.base.json`, `eslint.config.mjs`, `.prettierrc.json`, `.prettierignore`, `.editorconfig`, `.nvmrc` y `.env.example`.
 - `pnpm-workspace.yaml` declara `apps/*` y `packages/*`; paquetes `@<proyecto>/<nombre>` y dependencias internas `workspace:*`. Las apps no se importan entre sí: lo compartido va a `packages/shared`.
 - `apps/mobile` no pertenece al workspace: tiene `pubspec.yaml` y `pubspec.lock`, consume la API solo por HTTP con contratos verificados por fixtures (FSEC-4) y queda excluida de `eslint.config.mjs` y `.prettierignore` (FLT-4).
 - Puertos según AGENTS: web `1XX01`, API `1XX02`, DB `1XX03`, API pública `1XX04`.

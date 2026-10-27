@@ -68,11 +68,9 @@
 
 ## FTEST-7. Release
 
-- Sale de una etiqueta `vX.Y.Z` y depende (`needs:`) de los checks de FTEST-6 sobre el mismo commit; falla si `version:` de `pubspec.yaml` no coincide con la etiqueta (nada de `--build-name` improvisado).
-- Solo el job que publica tiene `permissions: contents: write`; los de build, `contents: read`.
+- Versión, bump, tag, workflow, checksums y notas según [REL](versioning-release.md); la fuente única es `version:` de `pubspec.yaml` y el workflow depende (`needs:`) de los checks de FTEST-6 sobre el mismo commit.
 - Firma: Android con el keystore de los secretos de CI, escrito en el job y borrado al terminar; macOS con Developer ID, `xcrun notarytool` y `stapler`; Windows con Authenticode o MSIX. Sin firma no hay release estable.
 - Builds con `--obfuscate --split-debug-info=build/symbols/<versión>`; los símbolos son artefacto privado del run, nunca de la release.
-- Cada archivo publicado tiene su línea en `SHA256SUMS` y una atestación (`actions/attest-build-provenance`).
-- Los secretos de firma no aparecen en logs ni artefactos y sus jobs no corren con código de PRs de forks.
+- El número de build (`+N`) de `pubspec.yaml` solo crece entre versiones enviadas a tiendas.
 
-**Comprobación:** `sha256sum -c SHA256SUMS` pasa sobre los archivos publicados y la release no contiene `build/symbols`.
+**Comprobación:** las comprobaciones de REL-4 y REL-5 pasan y la release no contiene `build/symbols`.

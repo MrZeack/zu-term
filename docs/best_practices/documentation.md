@@ -17,6 +17,7 @@
 ## DOC-3. Una fuente por regla
 
 - Enlaza reglas de otros temas en lugar de repetirlas. Conserva los IDs al resumir.
+- Cuando una regla evita un fallo silencioso o un error con mensaje propio, registra el síntoma en [troubleshooting](troubleshooting.md) con su ID, sin repetir la regla. Al renombrar o eliminar un ID, actualiza esa fila.
 - Agrupa por tema; divide un documento solo si sus partes se consultan de forma independiente.
 - Busca que una guía se lea en pocos minutos. Recorta hasta que quitar otra frase haga perder una condición, decisión o comprobación; no impongas un límite que sacrifique precisión.
 

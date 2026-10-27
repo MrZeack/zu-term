@@ -44,7 +44,7 @@ Scripts separados (STACK-2): `lint` solo comprueba (`--max-warnings=0`), `lint:f
 
 ## TEST-6. CI
 
-- En cada push y PR: `pnpm install --frozen-lockfile` → `pnpm audit --audit-level low` → `make check` → servicios externos y migraciones → integración (`RUN_DB_TESTS=true`) → `make up` → `make smoke` → `make e2e` → `make down`.
+- En cada push y PR: `pnpm install --frozen-lockfile` → `pnpm audit --audit-level low` → `make check`. Solo si existen, después: servicios externos y migraciones → integración (`RUN_DB_TESTS=true`) → `make up` → `make smoke` → `make e2e` → `make down`.
 - Secretos de test generados en el job o desde secrets de CI. El job no recibe claves de modelos de IA (E2E-1) y exporta `E2E_TELEMETRY_DISABLED=1`.
 - `.e2e/` y `logs/` se suben como artefactos también si el job falla; solo contienen datos sintéticos (LOG-10).
 
@@ -63,6 +63,7 @@ Cada afirmación funcional o de seguridad del README ("refresh hasheado", "soft 
 | E2E | flujos de usuario en navegador, sin IA | `e2e` + `@e2e-dev/web` | `apps/web/e2e/*.e2e.ts` | `make e2e` |
 | Operativa | contrato de Makefile, Compose y scripts | bash | `scripts/*.test.sh` | MK-11 |
 
+- Solo existen las capas que corresponden a componentes del proyecto: un CLI o una librería suele tener unitarias y, para un CLI, pruebas que ejecutan el binario y comprueban salida y código de salida.
 - `make check` (lint → typecheck → test → build) es la puerta de calidad local y de CI; `make smoke` y `make e2e` corren contra `make up`.
 - La integración se omite (`{ skip: !shouldRun }`) salvo con `RUN_DB_TESTS=true`, para que `pnpm test` funcione sin DB.
 - "E2E" es solo navegador; supertest o `fetch` son rutas o smoke. Flutter según FTEST-1.

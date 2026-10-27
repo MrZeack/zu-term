@@ -2,7 +2,7 @@
 
 **Leer cuando:** se configure CI/CD o se empaqueten releases.
 
-Complementa [TEST](testing-ci.md), [GH](deployment-github.md), [DEP](deployment.md) y [DB](database-migrations.md).
+Complementa [TEST](testing-ci.md), [GH](deployment-github.md), [DEP](deployment.md) y [DB](database-migrations.md); versión, tag y release en [REL](versioning-release.md).
 
 ## CD-1. CI independiente de producción
 
