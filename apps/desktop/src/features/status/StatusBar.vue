@@ -19,6 +19,11 @@ const props = defineProps<{
   paneCount: number;
   runProcesses?: RunProcessInfo[] | undefined;
   home?: string | undefined;
+  errorCount?: number | undefined;
+}>();
+
+const emit = defineEmits<{
+  toggleErrors: [];
 }>();
 
 const densityStyle = {
@@ -69,6 +74,21 @@ const runTooltip = computed(() => formatRunProcessesTooltip(props.runProcesses ?
       <span class="status-item status-size">
         {{ formatTerminalSize(props.pane?.cols, props.pane?.rows) }}
       </span>
+      <template v-if="props.errorCount">
+        <span class="status-divider" aria-hidden="true" />
+        <button
+          class="status-item status-error"
+          type="button"
+          :title="`${props.errorCount} error${props.errorCount === 1 ? '' : 'es'} registrados. Clic para mostrar u ocultar.`"
+          aria-label="Ver o alternar área de errores"
+          @click="emit('toggleErrors')"
+        >
+          <span class="status-error-dot" aria-hidden="true" />
+          <strong class="status-error-label"
+            >{{ props.errorCount }} error{{ props.errorCount === 1 ? '' : 'es' }}</strong
+          >
+        </button>
+      </template>
     </div>
   </footer>
 </template>
@@ -215,6 +235,42 @@ const runTooltip = computed(() => formatRunProcessesTooltip(props.runProcesses ?
   min-width: 58px;
   color: var(--muted);
   text-align: right;
+}
+
+.status-error {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 6px;
+  border: 1px solid rgba(255, 140, 140, 0.4);
+  border-radius: 4px;
+  background: rgba(255, 140, 140, 0.12);
+  color: var(--danger, #ff8c8c);
+  font-family: Menlo, monospace;
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.status-error:hover {
+  background: rgba(255, 140, 140, 0.24);
+  color: #ffffff;
+}
+
+.status-error-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--danger, #ff8c8c);
+  box-shadow: 0 0 0 2px rgba(255, 140, 140, 0.3);
+}
+
+.status-error-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @media (max-width: 700px) {

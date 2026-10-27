@@ -5,7 +5,7 @@ import { listen as tauriListen, type UnlistenFn } from '@tauri-apps/api/event';
 import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { ask } from '@tauri-apps/plugin-dialog';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from 'vue';
-import { useLayoutStore, useWorkspaceOperationStore } from './core/app-stores.ts';
+import { useErrorStore, useLayoutStore, useWorkspaceOperationStore } from './core/app-stores.ts';
 import { APP_NAME, APP_VERSION } from './core/brand.ts';
 import { UI_DENSITY } from './core/ui-density.ts';
 import { configClient, WORKSPACES_UPDATED_EVENT } from './features/config/config-client.ts';
@@ -13,6 +13,7 @@ import { createConfigFile, parseConfigFile } from './features/config/config.ts';
 import { paneMenuItems } from './features/context-menu/menu-items.ts';
 import { showPaneMenu } from './features/context-menu/pane-menu.ts';
 import type { ContextMenuPosition } from './features/context-menu/position.ts';
+import ErrorArea from './features/errors/ErrorArea.vue';
 import LayoutView from './features/layout/LayoutView.vue';
 import { createPaneActions } from './features/pane-actions/pane-actions.ts';
 import { paneTitle, shortPath } from './features/pane-header/pane-title.ts';
@@ -67,6 +68,7 @@ import {
 
 const store = useLayoutStore();
 const workspaceOperation = useWorkspaceOperationStore();
+const errorStore = useErrorStore();
 const appWindow = getCurrentWindow();
 const home = ref<string>();
 const localHost = ref<string>();
@@ -87,7 +89,13 @@ watch(closePromptVisible, (visible) => {
 const workspaceCatalog = ref<WorkspaceCatalog>(createWorkspaceCatalog());
 const workspaceDialogVisible = ref(false);
 const workspaceDialogMode = ref<'new' | 'save'>('new');
-const workspaceError = ref<string>();
+const workspaceError = computed({
+  get: () => errorStore.latestError?.message,
+  set: (val: string | undefined) => {
+    if (val) errorStore.report(val);
+    else errorStore.clear();
+  },
+});
 const layoutRevision = ref(0);
 const terminalSizes = ref<Record<string, { cols: number; rows: number }>>({});
 const isMac = navigator.userAgent.includes('Mac');
@@ -163,14 +171,15 @@ const actions = createPaneActions({
   closeWindow: () => appWindow.close(),
 });
 
-const report = (error: unknown) => console.error(error);
+const report = (error: unknown, fallback?: string) => {
+  errorStore.report(error, fallback);
+};
 
 const session = createWorkspaceSession({
   store: configClient,
   locks: workspaceLockClient,
   onError: (message, error) => {
-    workspaceError.value = message;
-    if (error !== undefined) report(error);
+    errorStore.report(error ?? message, message);
   },
 });
 
@@ -536,6 +545,8 @@ onMounted(async () => {
       report(error);
     }
     window.addEventListener('focus', onWindowFocus);
+    window.addEventListener('error', onWindowError);
+    window.addEventListener('unhandledrejection', onUnhandledRejection);
     void refreshRunProcesses();
     // Workspace changes arrive through WORKSPACES_UPDATED_EVENT from the backend.
     runProcessesTimer = setInterval(() => void refreshRunProcesses(), 3000);
@@ -543,6 +554,14 @@ onMounted(async () => {
     report(error);
   }
 });
+
+function onWindowError(event: ErrorEvent) {
+  errorStore.report(event.error ?? event.message);
+}
+
+function onUnhandledRejection(event: PromiseRejectionEvent) {
+  errorStore.report(event.reason);
+}
 
 watch(activeCwds, () => {
   void refreshRunProcesses();
@@ -560,6 +579,8 @@ onBeforeUnmount(() => {
   }
   window.removeEventListener('keydown', onKeydown, true);
   window.removeEventListener('focus', onWindowFocus);
+  window.removeEventListener('error', onWindowError);
+  window.removeEventListener('unhandledrejection', onUnhandledRejection);
   unlistenClose?.();
   unlistenRequestClose?.();
   unlistenWorkspaces?.();
@@ -644,6 +665,13 @@ onBeforeUnmount(() => {
         <span class="theme-switch" aria-hidden="true">⇄</span>
       </button>
     </header>
+    <ErrorArea
+      :errors="errorStore.errors"
+      :visible="errorStore.visible"
+      @dismiss="errorStore.dismiss"
+      @clear="errorStore.clear"
+      @toggle="errorStore.toggleVisible"
+    />
     <LayoutView
       v-if="ready"
       :key="layoutRevision"
@@ -664,6 +692,8 @@ onBeforeUnmount(() => {
       :pane-count="paneCount"
       :run-processes="runProcesses"
       :home="home"
+      :error-count="errorStore.errorCount"
+      @toggle-errors="errorStore.toggleVisible"
     />
     <div
       v-if="closePromptVisible"

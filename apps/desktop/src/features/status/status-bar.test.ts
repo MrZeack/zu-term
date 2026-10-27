@@ -32,4 +32,6 @@ test('monta la barra de estado debajo del layout y recibe el tamaño de la PTY',
   assert.match(statusSource, /formatTerminalSize/);
   assert.match(statusSource, /status-run/);
   assert.match(statusSource, /runProcesses/);
+  assert.match(statusSource, /status-error/);
+  assert.match(statusSource, /props\.errorCount/);
 });

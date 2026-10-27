@@ -13,7 +13,7 @@ import {
 
 test('defines the Zu Term identity used by the desktop runtime', () => {
   assert.equal(APP_NAME, 'Zu Term');
-  assert.equal(APP_VERSION, '0.1.4');
+  assert.equal(APP_VERSION, '0.1.6');
   assert.equal(APP_SLUG, 'zu-term');
   assert.equal(APP_TERMINAL_ENV, 'ZU_TERM_TERMINAL');
   assert.equal(APP_COMMAND_PREFIX, 'ZuTermCommand=');
