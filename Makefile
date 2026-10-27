@@ -27,7 +27,8 @@ deps: env ## Install JS dependencies from the lockfile
 	@pnpm install --frozen-lockfile
 
 icons: env ## Generate platform icons from the project icon
-	@cd apps/desktop && pnpm tauri icon ../../icon.png --output src-tauri/icons
+	@cd apps/desktop && pnpm tauri icon ../../icon.png --output src-tauri/icons 2>&1 | grep -v -E "Android|iOS|Appx" || true
+	@rm -rf apps/desktop/src-tauri/icons/android apps/desktop/src-tauri/icons/ios apps/desktop/src-tauri/icons/Square*.png apps/desktop/src-tauri/icons/StoreLogo.png
 
 install: deps icons ## Build in release and install into the OS app launcher
 	@scripts/install-app.sh install

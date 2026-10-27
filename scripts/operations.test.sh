@@ -18,6 +18,12 @@ grep -qE '^icons:' Makefile || fail "falta el target de generación de iconos"
 grep -qE '^install: deps icons( |$)' Makefile || fail "install no prepara los iconos del bundle"
 grep -qF 'pnpm tauri icon ../../icon.png --output src-tauri/icons' Makefile \
   || fail "el build no genera los iconos Tauri desde icon.png"
+if grep -qE '"staticlib"|"cdylib"' apps/desktop/src-tauri/Cargo.toml; then
+  fail "Cargo.toml compila librerías móviles (staticlib/cdylib)"
+fi
+if [[ -d apps/desktop/src-tauri/icons/android ]] || [[ -d apps/desktop/src-tauri/icons/ios ]]; then
+  fail "existen iconos generados para android o ios en src-tauri/icons"
+fi
 grep -qE '^  build appimage$' scripts/install-app.sh \
   || fail "el instalador Linux no construye solo el AppImage"
 if grep -qE '^  build deb,appimage$' scripts/install-app.sh; then
