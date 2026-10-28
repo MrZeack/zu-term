@@ -7,6 +7,7 @@ import { buildAgentResumeCommand, type AgentState } from '../workspace/agent.ts'
 import { parseOsc7, parseZuTermAgent, parseZuTermCommand } from './osc.ts';
 import { ptyClient } from './pty-client.ts';
 import { clampFontSize, resolveFontFamily } from './terminal-font.ts';
+import { coalesce, debounce } from './resize-scheduler.ts';
 import { terminals } from './terminal-registry.ts';
 import { deferUntilNextFrame } from './webgl-startup.ts';
 import { THEME_CHANGE_EVENT, terminalTheme, type ThemeName } from '../theme/theme.ts';
@@ -48,6 +49,22 @@ term.loadAddon(fit);
 let ptyId: number | undefined;
 let unmounted = false;
 let observer: ResizeObserver | undefined;
+// While a divider or the window is dragged: one fit per frame, and one PTY
+// resize (so one redraw of the program) once the size stops changing.
+const PTY_RESIZE_DELAY_MS = 50;
+const fitFrame = coalesce(() => fit.fit(), {
+  set: (callback) => window.requestAnimationFrame(callback),
+  clear: (handle) => window.cancelAnimationFrame(handle),
+});
+const ptyResize = debounce(
+  (cols: number, rows: number) => {
+    if (ptyId !== undefined) ptyClient.resize(ptyId, cols, rows).catch(report);
+  },
+  {
+    set: (callback) => window.setTimeout(callback, PTY_RESIZE_DELAY_MS),
+    clear: (handle) => window.clearTimeout(handle),
+  },
+);
 
 const report = (error: unknown) => console.error(error);
 
@@ -100,7 +117,7 @@ onMounted(async () => {
   });
   term.onResize(({ cols, rows }) => {
     emit('size', cols, rows);
-    if (ptyId !== undefined) ptyClient.resize(ptyId, cols, rows).catch(report);
+    ptyResize.schedule(cols, rows);
   });
   emit('size', term.cols, term.rows);
   term.textarea?.addEventListener('focus', () => emit('focus'));
@@ -122,7 +139,7 @@ onMounted(async () => {
     paste: (text) => term.paste(text),
     clear: () => term.clear(),
   });
-  observer = new ResizeObserver(() => fit.fit());
+  observer = new ResizeObserver(() => fitFrame.schedule());
   observer.observe(host.value);
 
   try {
@@ -186,6 +203,8 @@ watch(
 onBeforeUnmount(() => {
   unmounted = true;
   observer?.disconnect();
+  fitFrame.cancel();
+  ptyResize.cancel();
   window.removeEventListener(THEME_CHANGE_EVENT, updateTerminalTheme);
   terminals.unregister(props.paneId);
   if (ptyId !== undefined) ptyClient.kill(ptyId).catch(report);
