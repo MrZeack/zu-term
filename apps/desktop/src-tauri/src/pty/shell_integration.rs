@@ -67,11 +67,11 @@ mod tests {
                 let _ = tx.send(event);
             })
             .expect("spawn");
-        let mut output = String::new();
+        let mut output = Vec::new();
         loop {
             match rx.recv_timeout(Duration::from_secs(10)).expect("pty event") {
-                PtyEvent::Output(text) => output.push_str(&text),
-                PtyEvent::Exit(_) => return output,
+                PtyEvent::Output(bytes) => output.extend(bytes),
+                PtyEvent::Exit(_) => return String::from_utf8_lossy(&output).into(),
             }
         }
     }

@@ -6,21 +6,23 @@ use std::sync::{Mutex, MutexGuard};
 use std::thread;
 
 use portable_pty::{ChildKiller, CommandBuilder, MasterPty, PtySize, native_pty_system};
-use serde::Serialize;
 
 use super::options::validate_size;
-use super::utf8::Utf8Stream;
+use super::output::{MAX_OUTPUT_BATCH_BYTES, OUTPUT_FLUSH_INTERVAL, forward_output};
 
 pub const MAX_WRITE_BYTES: usize = 1 << 20;
 /// Pending input chunks per session; a full queue rejects writes instead of
 /// blocking the caller (Tauri runs sync commands on the main thread).
 pub const MAX_QUEUED_WRITES: usize = 16;
 const READ_BUFFER_BYTES: usize = 16 * 1024;
+/// Read chunks waiting to be forwarded; a full queue stops reading, so the
+/// PTY applies backpressure to the program instead of growing memory.
+const MAX_QUEUED_READS: usize = 64;
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(tag = "event", content = "data", rename_all = "camelCase")]
+/// Output is raw bytes: xterm.js decodes UTF-8 across chunk boundaries.
+#[derive(Debug, Clone, PartialEq)]
 pub enum PtyEvent {
-    Output(String),
+    Output(Vec<u8>),
     Exit(Option<u32>),
 }
 
@@ -75,8 +77,8 @@ impl PtyRegistry {
         self.sessions.lock().map_err(|_| "pty registry poisoned".to_string())
     }
 
-    /// Starts `command` in a new PTY; output and exit are reported to `sink`
-    /// from a dedicated reader thread.
+    /// Starts `command` in a new PTY; a reader thread queues its output and a
+    /// forwarder thread reports it to `sink` in batches, then the exit.
     pub fn spawn(
         &self,
         owner: &str,
@@ -98,17 +100,24 @@ impl PtyRegistry {
         self.sessions()?
             .insert(id, Session { owner: owner.to_owned(), master: pair.master, input, killer });
 
+        let (chunks_tx, chunks) = mpsc::sync_channel::<Vec<u8>>(MAX_QUEUED_READS);
         thread::Builder::new()
             .name(format!("pty-{id}"))
             .spawn(move || {
-                let mut decoder = Utf8Stream::default();
                 let mut buffer = [0u8; READ_BUFFER_BYTES];
                 while let Ok(read @ 1..) = reader.read(&mut buffer) {
-                    let text = decoder.push(&buffer[..read]);
-                    if !text.is_empty() {
-                        sink(PtyEvent::Output(text));
+                    if chunks_tx.send(buffer[..read].to_vec()).is_err() {
+                        break;
                     }
                 }
+            })
+            .map_err(|e| e.to_string())?;
+        thread::Builder::new()
+            .name(format!("pty-{id}-output"))
+            .spawn(move || {
+                forward_output(&chunks, OUTPUT_FLUSH_INTERVAL, MAX_OUTPUT_BATCH_BYTES, |batch| {
+                    sink(PtyEvent::Output(batch));
+                });
                 sink(PtyEvent::Exit(child.wait().ok().map(|status| status.exit_code())));
             })
             .map_err(|e| e.to_string())?;
@@ -170,11 +179,11 @@ mod tests {
     }
 
     fn collect(rx: &mpsc::Receiver<PtyEvent>) -> (String, Option<u32>) {
-        let mut output = String::new();
+        let mut output = Vec::new();
         loop {
             match rx.recv_timeout(Duration::from_secs(5)).expect("pty event") {
-                PtyEvent::Output(text) => output.push_str(&text),
-                PtyEvent::Exit(code) => return (output, code),
+                PtyEvent::Output(bytes) => output.extend(bytes),
+                PtyEvent::Exit(code) => return (String::from_utf8_lossy(&output).into(), code),
             }
         }
     }

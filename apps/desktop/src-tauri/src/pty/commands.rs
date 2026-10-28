@@ -1,5 +1,5 @@
 use portable_pty::CommandBuilder;
-use tauri::ipc::Channel;
+use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{State, WebviewWindow};
 
 use super::options::resolve_cwd;
@@ -46,7 +46,7 @@ pub fn pty_spawn(
     history_id: Option<String>,
     cols: u16,
     rows: u16,
-    on_event: Channel<PtyEvent>,
+    on_event: Channel<InvokeResponseBody>,
 ) -> Result<u32, String> {
     registry.spawn(
         window.label(),
@@ -54,7 +54,13 @@ pub fn pty_spawn(
         cols,
         rows,
         move |event| {
-            let _ = on_event.send(event);
+            // Output goes as an ArrayBuffer (no JSON escaping); exit as JSON.
+            let _ = on_event.send(match event {
+                PtyEvent::Output(bytes) => InvokeResponseBody::Raw(bytes),
+                PtyEvent::Exit(code) => {
+                    InvokeResponseBody::Json(serde_json::json!({ "exit": code }).to_string())
+                }
+            });
         },
     )
 }

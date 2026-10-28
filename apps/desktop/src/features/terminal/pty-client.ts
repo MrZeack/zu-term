@@ -1,6 +1,5 @@
 import { Channel, invoke } from '@tauri-apps/api/core';
-
-export type PtyEvent = { event: 'output'; data: string } | { event: 'exit'; data: number | null };
+import { toPtyEvent, type PtyEvent } from './pty-message.ts';
 
 export const ptyClient = {
   spawn(
@@ -10,8 +9,11 @@ export const ptyClient = {
     rows: number,
     onEvent: (event: PtyEvent) => void,
   ) {
-    const channel = new Channel<PtyEvent>();
-    channel.onmessage = onEvent;
+    const channel = new Channel<unknown>();
+    channel.onmessage = (message) => {
+      const event = toPtyEvent(message);
+      if (event) onEvent(event);
+    };
     return invoke<number>('pty_spawn', {
       cwd: cwd ?? null,
       historyId: historyId ?? null,
