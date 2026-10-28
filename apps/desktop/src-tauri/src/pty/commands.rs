@@ -36,9 +36,11 @@ fn shell_command(
 
 // Sessions are bound to the calling window's label, never to a client value.
 // Tauri injects window and state as arguments, hence the long signature.
+// Async: opening the PTY and starting the shell must not block the main
+// thread, e.g. while a workspace restores many panes.
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
-pub fn pty_spawn(
+pub async fn pty_spawn(
     window: WebviewWindow,
     registry: State<'_, PtyRegistry>,
     paths: State<'_, AppPaths>,
@@ -65,6 +67,8 @@ pub fn pty_spawn(
     )
 }
 
+// Write, resize and kill stay sync (they only take a lock and queue): async
+// commands run as independent tasks and could reorder keystrokes or sizes.
 #[tauri::command]
 pub fn pty_write(
     window: WebviewWindow,
