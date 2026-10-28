@@ -1,4 +1,4 @@
-import { APP_SLUG } from '../../core/brand.ts';
+import { APP_NAME, APP_SLUG } from '../../core/brand.ts';
 import { paneIds, type LayoutNode } from '../layout/layout-tree.ts';
 import type { PaneState } from '../layout/layout.store.ts';
 import { parseAgentState, parseResumableAgent, type AgentState } from './agent.ts';
@@ -333,4 +333,12 @@ export function saveWorkspaceCatalog(
   } catch {
     return false;
   }
+}
+
+export function windowTitleForWorkspace(
+  workspaceName?: string | null,
+  fallback: string = APP_NAME,
+): string {
+  const trimmed = workspaceName?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : fallback;
 }

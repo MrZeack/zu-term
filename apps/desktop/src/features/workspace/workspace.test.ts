@@ -13,6 +13,7 @@ import {
   setActiveWorkspace,
   upsertWorkspace,
   reconcileWorkspaceCatalog,
+  windowTitleForWorkspace,
   type WorkspaceCatalog,
   type WorkspaceStorage,
 } from './workspace.ts';
@@ -271,4 +272,14 @@ test('elimina workspaces borrados en disco si no están activos en esta ventana'
   const reconciled = reconcileWorkspaceCatalog(localCatalog, diskCatalog);
   assert.equal(reconciled.workspaces.length, 1);
   assert.equal(reconciled.workspaces[0]?.id, 'ws-2');
+});
+
+test('windowTitleForWorkspace devuelve el nombre del workspace o Zu Term por defecto', () => {
+  assert.equal(windowTitleForWorkspace('Backend API'), 'Backend API');
+  assert.equal(windowTitleForWorkspace('  Frontend App  '), 'Frontend App');
+  assert.equal(windowTitleForWorkspace(''), 'Zu Term');
+  assert.equal(windowTitleForWorkspace('   '), 'Zu Term');
+  assert.equal(windowTitleForWorkspace(undefined), 'Zu Term');
+  assert.equal(windowTitleForWorkspace(null), 'Zu Term');
+  assert.equal(windowTitleForWorkspace(undefined, 'Custom'), 'Custom');
 });

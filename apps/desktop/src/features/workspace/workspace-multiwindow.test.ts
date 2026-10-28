@@ -67,3 +67,10 @@ test('App.vue configura eventos y sincronización reactiva de workspaces para m�
   assert.match(appSource, /reloadWorkspaces/);
   assert.match(appSource, /reconcileWorkspaceCatalog/);
 });
+
+test('App.vue actualiza el título de la ventana con el workspace activo o Zu Term', async () => {
+  const appSource = await readFile(new URL('../../App.vue', import.meta.url), 'utf8');
+  assert.match(appSource, /windowTitleForWorkspace/);
+  assert.match(appSource, /appWindow\.setTitle/);
+  assert.match(appSource, /document\.title\s*=/);
+});

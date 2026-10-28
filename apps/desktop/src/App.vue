@@ -66,6 +66,7 @@ import {
   reconcileWorkspaceCatalog,
   setActiveWorkspace,
   upsertWorkspace,
+  windowTitleForWorkspace,
   type WorkspaceCatalog,
 } from './features/workspace/workspace.ts';
 
@@ -107,6 +108,16 @@ const themeLabel = computed(() => (theme.value === 'cyan' ? 'Cian' : 'Menta'));
 const paneCount = computed(() => Object.keys(store.panes).length);
 const activeWorkspaceName = computed(
   () => findWorkspace(workspaceCatalog.value, workspaceCatalog.value.activeId)?.name,
+);
+const windowTitle = computed(() => windowTitleForWorkspace(activeWorkspaceName.value));
+
+watch(
+  windowTitle,
+  (title) => {
+    document.title = title;
+    void appWindow.setTitle(title).catch(report);
+  },
+  { immediate: true },
 );
 const statusPane = computed<StatusPane | undefined>(() => {
   const pane = store.panes[store.activeId];
