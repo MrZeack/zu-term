@@ -21,6 +21,13 @@ tauri = { version = "=2.11.6", features = [] }
 tauri-plugin-clipboard-manager = "=2.3.3"
 tauri-plugin-dialog = "=2.7.3"
 
+# Smaller, faster binary at the cost of longer release builds. Panics keep
+# unwinding: a failing PTY thread must not take down every other shell.
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6.1"
 objc2-app-kit = { version = "0.3.2", default-features = false, features = [
