@@ -1,6 +1,6 @@
 [package]
 name = "zu-term"
-version = "0.1.7"
+version = "0.1.8"
 edition = "2024"
 publish = false
 
@@ -9,7 +9,7 @@ name = "zu_term_lib"
 crate-type = ["rlib"]
 
 [build-dependencies]
-tauri-build = { version = "=2.6.3", features = [] }
+tauri-build = { version = "2", features = [] }
 
 [dependencies]
 gethostname = "1"
@@ -17,9 +17,9 @@ libc = "=0.2.191"
 portable-pty = "0.9"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tauri = { version = "=2.11.6", features = [] }
-tauri-plugin-clipboard-manager = "=2.3.3"
-tauri-plugin-dialog = "=2.7.3"
+tauri = { version = "2.12", features = [] }
+tauri-plugin-clipboard-manager = "2.5"
+tauri-plugin-dialog = "2.8"
 
 # Smaller, faster binary at the cost of longer release builds. Panics keep
 # unwinding: a failing PTY thread must not take down every other shell.
