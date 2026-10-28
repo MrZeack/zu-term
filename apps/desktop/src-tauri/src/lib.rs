@@ -52,7 +52,7 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building the application")
         .run(|app_handle, event| {
-            if let tauri::RunEvent::ExitRequested { api, .. } = event {
+            if let tauri::RunEvent::ExitRequested { api, code: None, .. } = event {
                 let windows = app_handle.webview_windows();
                 if !windows.is_empty() {
                     api.prevent_exit();

@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -66,4 +67,10 @@ test('detecta atajos de cierre de ventana completa (CMD+SHIFT+W)', () => {
 
   assert.equal(isCloseWindowShortcut(key('W', { ctrlKey: true, shiftKey: true }), false), true);
   assert.equal(isCloseWindowShortcut(key('w'), true), false);
+});
+
+test('App.vue escucha zu-term://request-close para desplegar confirmación de cierre', async () => {
+  const appSource = await readFile(new URL('../../App.vue', import.meta.url), 'utf8');
+  assert.match(appSource, /tauriListen\(['"]zu-term:\/\/request-close['"]/);
+  assert.match(appSource, /closePromptVisible\.value\s*=\s*true/);
 });

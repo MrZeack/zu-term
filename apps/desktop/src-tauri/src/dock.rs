@@ -5,12 +5,13 @@ mod macos {
     use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 
     use objc2::MainThreadOnly;
-    use objc2::ffi::class_addMethod;
+    use objc2::ffi::{class_addMethod, class_replaceMethod};
     use objc2::rc::Retained;
     use objc2::runtime::{AnyObject, ProtocolObject, Sel};
     use objc2::sel;
     use objc2_app_kit::{NSApplication, NSApplicationDelegate, NSMenu, NSMenuItem};
     use objc2_foundation::{MainThreadMarker, ns_string};
+    use tauri::{Emitter, Manager};
 
     static APP_HANDLE: OnceLock<tauri::AppHandle> = OnceLock::new();
     static DOCK_MENU: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
@@ -18,6 +19,14 @@ mod macos {
 
     const DOCK_MENU_TYPES: &[u8] = b"@@:@\0";
     const MENU_ACTION_TYPES: &[u8] = b"v@:@\0";
+    pub const SHOULD_TERMINATE_TYPES: &[u8] = b"Q@:@\0";
+
+    pub const NST_TERMINATE_CANCEL: usize = 0;
+    pub const NST_TERMINATE_NOW: usize = 1;
+
+    pub fn should_terminate_reply(has_windows: bool) -> usize {
+        if has_windows { NST_TERMINATE_CANCEL } else { NST_TERMINATE_NOW }
+    }
 
     extern "C-unwind" fn application_dock_menu(
         _delegate: &AnyObject,
@@ -25,6 +34,29 @@ mod macos {
         _application: &NSApplication,
     ) -> *mut NSMenu {
         DOCK_MENU.load(Ordering::Acquire).cast::<NSMenu>()
+    }
+
+    extern "C-unwind" fn application_should_terminate(
+        _delegate: &AnyObject,
+        _selector: Sel,
+        _application: &NSApplication,
+    ) -> usize {
+        let Some(app) = APP_HANDLE.get() else {
+            return NST_TERMINATE_NOW;
+        };
+
+        let windows = app.webview_windows();
+        if should_terminate_reply(!windows.is_empty()) == NST_TERMINATE_NOW {
+            return NST_TERMINATE_NOW;
+        }
+
+        let _ = app.emit("zu-term://request-close", ());
+        for window in windows.values() {
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+
+        NST_TERMINATE_CANCEL
     }
 
     extern "C-unwind" fn open_new_window(
@@ -91,8 +123,12 @@ mod macos {
         let dock_menu_fn: extern "C-unwind" fn(&AnyObject, Sel, &NSApplication) -> *mut NSMenu =
             application_dock_menu;
         let new_window_fn: extern "C-unwind" fn(&AnyObject, Sel, &AnyObject) = open_new_window;
+        let should_terminate_fn: extern "C-unwind" fn(&AnyObject, Sel, &NSApplication) -> usize =
+            application_should_terminate;
         let dock_menu_imp: objc2::runtime::Imp = unsafe { std::mem::transmute(dock_menu_fn) };
         let new_window_imp: objc2::runtime::Imp = unsafe { std::mem::transmute(new_window_fn) };
+        let should_terminate_imp: objc2::runtime::Imp =
+            unsafe { std::mem::transmute(should_terminate_fn) };
         unsafe {
             class_addMethod(
                 class,
@@ -106,6 +142,20 @@ mod macos {
                 new_window_imp,
                 MENU_ACTION_TYPES.as_ptr().cast(),
             );
+            let added = class_addMethod(
+                class,
+                sel!(applicationShouldTerminate:),
+                should_terminate_imp,
+                SHOULD_TERMINATE_TYPES.as_ptr().cast(),
+            );
+            if !added.as_bool() {
+                class_replaceMethod(
+                    class,
+                    sel!(applicationShouldTerminate:),
+                    should_terminate_imp,
+                    SHOULD_TERMINATE_TYPES.as_ptr().cast(),
+                );
+            }
         }
     }
 }
@@ -117,3 +167,30 @@ pub fn install(app: &tauri::AppHandle) {
 
 #[cfg(not(target_os = "macos"))]
 pub fn install<R: tauri::Runtime>(_app: &tauri::AppHandle<R>) {}
+
+#[cfg(test)]
+mod tests {
+    #[cfg(target_os = "macos")]
+    use super::macos::*;
+
+    #[test]
+    fn cancels_termination_when_windows_are_open() {
+        #[cfg(target_os = "macos")]
+        assert_eq!(should_terminate_reply(true), NST_TERMINATE_CANCEL);
+    }
+
+    #[test]
+    fn permits_termination_when_no_windows_remain() {
+        #[cfg(target_os = "macos")]
+        assert_eq!(should_terminate_reply(false), NST_TERMINATE_NOW);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_selector_and_types_are_correct() {
+        use objc2::sel;
+        let s = sel!(applicationShouldTerminate:);
+        assert_eq!(s.name().to_bytes(), b"applicationShouldTerminate:");
+        assert_eq!(SHOULD_TERMINATE_TYPES, b"Q@:@\0");
+    }
+}
