@@ -30,6 +30,7 @@ Terminal orientada a agentes, apps y logs, con splits, cabecera por split (coman
 - 2026-10-23 · El catálogo y el tema se persisten en `~/.config/zu-term/config.json`; cada pane usa un historial zsh independiente en `~/.config/zu-term/history/` y se conservan los datos actuales de `localStorage` solo para la migración inicial.
 - 2026-10-23 · El arranque siempre crea una terminal nueva y deja `activeId` en `null`; un workspace solo se restaura tras una selección explícita desde `WorkspaceMenu.vue`.
 - 2026-10-23 · Las escrituras de configuración se serializan para conservar el último snapshot.
+- 2026-10-28 · Como máximo 12 splits usan el renderer WebGL (WebKit mantiene unos 16 contextos y descarta los más antiguos); el resto, o uno que pierda su contexto, usa el renderer DOM de xterm.
 - 2026-10-28 · Al redimensionar, cada split ajusta xterm como máximo una vez por frame y avisa a la PTY 50 ms después del último cambio, para que el programa se redibuje una sola vez.
 - 2026-10-28 · La salida de la PTY se agrupa y viaja como `ArrayBuffer`: cada mensaje al webview tiene un coste fijo, y los de más de 8 KB necesitan una segunda petición. Antes era un JSON por cada `read`.
 - 2026-10-28 · Sin guardado automático del workspace: cada cambio de título (p. ej. los spinners de los agentes) o del divisor reescribía `config.json` con `fsync` y hacía recargarlo a todas las ventanas. Se guarda desde el menú, al cambiar de workspace o al cerrar.

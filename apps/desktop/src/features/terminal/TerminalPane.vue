@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { FitAddon } from '@xterm/addon-fit';
+import type { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal } from '@xterm/xterm';
 import { onBeforeUnmount, onMounted, useTemplateRef, watch } from 'vue';
 import { UI_DENSITY } from '../../core/ui-density.ts';
@@ -9,7 +10,7 @@ import { ptyClient } from './pty-client.ts';
 import { clampFontSize, resolveFontFamily } from './terminal-font.ts';
 import { coalesce, debounce } from './resize-scheduler.ts';
 import { terminals } from './terminal-registry.ts';
-import { deferUntilNextFrame } from './webgl-startup.ts';
+import { deferUntilNextFrame, webglBudget } from './webgl-startup.ts';
 import { THEME_CHANGE_EVENT, terminalTheme, type ThemeName } from '../theme/theme.ts';
 
 const props = defineProps<{
@@ -49,6 +50,18 @@ term.loadAddon(fit);
 let ptyId: number | undefined;
 let unmounted = false;
 let observer: ResizeObserver | undefined;
+let webgl: WebglAddon | undefined;
+let holdsWebglSlot = false;
+
+// Disposing the addon makes xterm fall back to its DOM renderer.
+function dropWebgl() {
+  if (holdsWebglSlot) webglBudget.release();
+  holdsWebglSlot = false;
+  const addon = webgl;
+  webgl = undefined;
+  addon?.dispose();
+}
+
 // While a divider or the window is dragged: one fit per frame, and one PTY
 // resize (so one redraw of the program) once the size stops changing.
 const PTY_RESIZE_DELAY_MS = 50;
@@ -82,10 +95,15 @@ onMounted(async () => {
       void import('@xterm/addon-webgl')
         .then(({ WebglAddon }) => {
           if (unmounted) return;
+          holdsWebglSlot = webglBudget.acquire();
+          if (!holdsWebglSlot) return;
           try {
-            term.loadAddon(new WebglAddon());
+            webgl = new WebglAddon();
+            webgl.onContextLoss(dropWebgl);
+            term.loadAddon(webgl);
           } catch {
             // WebGL unavailable: xterm keeps its DOM renderer.
+            dropWebgl();
           }
         })
         .catch(() => {
@@ -205,6 +223,7 @@ onBeforeUnmount(() => {
   observer?.disconnect();
   fitFrame.cancel();
   ptyResize.cancel();
+  dropWebgl();
   window.removeEventListener(THEME_CHANGE_EVENT, updateTerminalTheme);
   terminals.unregister(props.paneId);
   if (ptyId !== undefined) ptyClient.kill(ptyId).catch(report);
