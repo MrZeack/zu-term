@@ -239,16 +239,6 @@ export function createWorkspaceSnapshot(
   };
 }
 
-export function syncActiveWorkspace(
-  catalog: WorkspaceCatalog,
-  snapshot: WorkspaceSnapshot,
-  updatedAt = Date.now(),
-): WorkspaceCatalog | null {
-  const active = findWorkspace(catalog, catalog.activeId);
-  if (!active) return null;
-  return upsertWorkspace(catalog, { ...active, snapshot, updatedAt });
-}
-
 export function findWorkspace(
   catalog: WorkspaceCatalog,
   id: string | null,

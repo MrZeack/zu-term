@@ -13,14 +13,13 @@ test('el arranque no restaura el workspace activo sin una selección explícita'
   assert.match(startupSource, /store\.init\(launchCwd \?\? homePath\)/);
 });
 
-test('el workspace activo se sincroniza cuando cambia el layout o la metadata del pane', async () => {
+test('el workspace solo se guarda con el botón o al cerrar, nunca con cada cambio', async () => {
   const appSource = await readFile(new URL('../../App.vue', import.meta.url), 'utf8');
 
-  assert.match(appSource, /syncActiveWorkspace\(workspaceCatalog\.value, store\.snapshot\(\)\)/);
-  assert.match(
-    appSource,
-    /watch\(\s*\[\s*\(\) => store\.root,\s*\(\) => store\.panes,\s*\(\) => store\.activeId/,
-  );
+  assert.doesNotMatch(appSource, /watch\(\s*\[\s*\(\) => store\.root/);
+  assert.doesNotMatch(appSource, /deep: true/);
+  assert.match(appSource, /@save="saveWorkspaceFromMenu"/);
+  assert.match(appSource, /if \(restore && !\(await saveCurrentWorkspace\(\)\)\) return;/);
 });
 
 test('el workspace activo adquiere un lock y lo libera antes de cerrar la ventana', async () => {

@@ -61,7 +61,6 @@ import {
   MAX_WORKSPACES,
   reconcileWorkspaceCatalog,
   setActiveWorkspace,
-  syncActiveWorkspace,
   upsertWorkspace,
   type WorkspaceCatalog,
 } from './features/workspace/workspace.ts';
@@ -151,7 +150,6 @@ let allowWindowClose = false;
 let unlistenClose: (() => void) | undefined;
 let unlistenRequestClose: UnlistenFn | undefined;
 let unlistenWorkspaces: UnlistenFn | undefined;
-let workspaceMutationSuspended = 0;
 
 function onWindowFocus() {
   void reloadWorkspaces();
@@ -316,13 +314,6 @@ async function persistWorkspace(id: string, next: WorkspaceCatalog): Promise<boo
   return true;
 }
 
-function persistActiveWorkspaceSnapshot() {
-  if (!ready.value || workspaceMutationSuspended > 0) return;
-  const next = syncActiveWorkspace(workspaceCatalog.value, store.snapshot());
-  if (!next?.activeId) return;
-  void persistWorkspace(next.activeId, next);
-}
-
 async function saveCurrentWorkspace(name?: string): Promise<boolean> {
   await reloadWorkspaces();
   const current = findWorkspace(workspaceCatalog.value, workspaceCatalog.value.activeId);
@@ -374,26 +365,21 @@ async function createNewWorkspace(name: string): Promise<boolean> {
   if (workspaceCatalog.value.activeId && !(await saveCurrentWorkspace())) return false;
   const id = createWorkspaceId();
   if (!(await session.acquire(id))) return false;
-  workspaceMutationSuspended += 1;
-  try {
-    const previousSnapshot = store.snapshot();
-    const cwd = store.panes[store.activeId]?.cwd ?? home.value ?? '/';
-    store.reset(cwd);
-    layoutRevision.value += 1;
-    const workspace = createWorkspaceRecord(id, name, store.snapshot());
-    let next = upsertWorkspace(workspaceCatalog.value, workspace);
-    next = setActiveWorkspace(next, workspace.id);
-    if (await persistWorkspace(id, next)) {
-      await session.claim(id);
-      return true;
-    }
-    store.restore(previousSnapshot);
-    layoutRevision.value += 1;
-    await session.release(id);
-    return false;
-  } finally {
-    workspaceMutationSuspended -= 1;
+  const previousSnapshot = store.snapshot();
+  const cwd = store.panes[store.activeId]?.cwd ?? home.value ?? '/';
+  store.reset(cwd);
+  layoutRevision.value += 1;
+  const workspace = createWorkspaceRecord(id, name, store.snapshot());
+  let next = upsertWorkspace(workspaceCatalog.value, workspace);
+  next = setActiveWorkspace(next, workspace.id);
+  if (await persistWorkspace(id, next)) {
+    await session.claim(id);
+    return true;
   }
+  store.restore(previousSnapshot);
+  layoutRevision.value += 1;
+  await session.release(id);
+  return false;
 }
 
 async function submitWorkspaceName(name: string) {
@@ -416,25 +402,17 @@ async function restoreWorkspace(id: string) {
   let switched = false;
   try {
     if (workspaceCatalog.value.activeId && !(await saveCurrentWorkspace())) return;
-    workspaceMutationSuspended += 1;
-    try {
-      const previousSnapshot = store.snapshot();
-      if (!store.restore(workspace.snapshot)) return;
-      const restoredWorkspace = { ...workspace, snapshot: store.snapshot() };
-      const next = setActiveWorkspace(
-        upsertWorkspace(workspaceCatalog.value, restoredWorkspace),
-        id,
-      );
-      if (!(await persistWorkspace(id, next))) {
-        store.restore(previousSnapshot);
-        return;
-      }
-      await session.claim(id);
-      switched = true;
-      layoutRevision.value += 1;
-    } finally {
-      workspaceMutationSuspended -= 1;
+    const previousSnapshot = store.snapshot();
+    if (!store.restore(workspace.snapshot)) return;
+    const restoredWorkspace = { ...workspace, snapshot: store.snapshot() };
+    const next = setActiveWorkspace(upsertWorkspace(workspaceCatalog.value, restoredWorkspace), id);
+    if (!(await persistWorkspace(id, next))) {
+      store.restore(previousSnapshot);
+      return;
     }
+    await session.claim(id);
+    switched = true;
+    layoutRevision.value += 1;
   } finally {
     if (!switched) await session.release(id);
     workspaceOperation.finish();
@@ -566,12 +544,6 @@ function onUnhandledRejection(event: PromiseRejectionEvent) {
 watch(activeCwds, () => {
   void refreshRunProcesses();
 });
-
-watch(
-  [() => store.root, () => store.panes, () => store.activeId],
-  () => persistActiveWorkspaceSnapshot(),
-  { deep: true },
-);
 
 onBeforeUnmount(() => {
   if (runProcessesTimer) {

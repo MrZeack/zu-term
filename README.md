@@ -66,7 +66,7 @@ make uninstall       # la desinstala
 
 ### Workspaces
 
-El menú `WORKSPACE` permite guardar, crear, cambiar y eliminar workspaces. Cada workspace conserva el árbol de splits, proporciones, nombres, títulos, split activo, última carpeta, historial asociado y el agente de cada pane. Después de seleccionar o crear uno, los cambios de splits, carpetas, títulos, nombres y contexto de agente se actualizan automáticamente en el workspace activo.
+El menú `WORKSPACE` permite guardar, crear, cambiar y eliminar workspaces. Cada workspace conserva el árbol de splits, proporciones, nombres, títulos, split activo, última carpeta, historial asociado y el agente de cada pane. Los cambios no se guardan solos: el workspace se guarda con `Guardar` del menú, al cambiar a otro workspace o al cerrar la ventana con `Cerrar y guardar workspace`.
 
 Mientras un workspace se está restaurando, el estado global bloquea nuevas selecciones para evitar abrirlo dos veces por clics o eventos concurrentes.
 
@@ -76,7 +76,7 @@ Al iniciar Zu Term no se abre ningún workspace automáticamente: aparece una te
 
 La configuración se guarda en `~/.config/zu-term/config.json`; los historiales independientes de zsh se guardan en `~/.config/zu-term/history/`. En la primera ejecución, las claves actuales `zu-term.workspace.v1` y `zu-term.theme` de `localStorage` se importan al archivo. Las claves antiguas `zylo.*` no se migran.
 
-Al cerrar una ventana, Zu Term pregunta si debe guardar el workspace. `Cerrar y guardar workspace` fuerza una última actualización del workspace activo; `Cerrar sin guardar workspace` desactiva la restauración automática sin eliminar los workspaces guardados.
+Al cerrar una ventana, Zu Term pregunta si debe guardar el workspace. `Cerrar y guardar workspace` guarda el workspace activo; `Cerrar sin guardar workspace` descarta los cambios desde el último guardado sin eliminar los workspaces guardados.
 
 Los agentes soportados son Codex, Claude Code, Kiro, Muse Code y Antigravity. Solo se restauran agentes ejecutados con un ID explícito: el workspace guarda ese ID y al restaurar ejecuta su comando de reanudación. Un agente sin ID no se guarda y su pane se restaura como una shell vacía. Los comandos usados son `codex resume <ID>`, `claude --resume <ID>`, `kiro-cli chat --resume-id <ID>`, `muse resume <ID>` y `agy --conversation <ID>`.
 
