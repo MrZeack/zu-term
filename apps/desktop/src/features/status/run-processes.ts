@@ -18,6 +18,23 @@ export function splitDirectories(panes: Record<string, PaneState>): string[] {
   return [...directories];
 }
 
+// Lets the status bar keep its current list when a refresh finds the same
+// processes, so the periodic check does not re-render it.
+export function sameRunProcesses(a: RunProcessInfo[], b: RunProcessInfo[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((process, index) => {
+      const other = b[index];
+      return (
+        other !== undefined &&
+        process.name === other.name &&
+        process.pid === other.pid &&
+        process.projectDir === other.projectDir
+      );
+    })
+  );
+}
+
 export function formatRunProcessesSummary(processes: RunProcessInfo[]): string | undefined {
   if (!processes || processes.length === 0) {
     return undefined;

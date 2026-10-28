@@ -24,7 +24,11 @@ import {
 } from './features/shortcuts/shortcuts.ts';
 import StatusBar from './features/status/StatusBar.vue';
 import { runProcessesClient } from './features/status/run-processes-client.ts';
-import { splitDirectories, type RunProcessInfo } from './features/status/run-processes.ts';
+import {
+  sameRunProcesses,
+  splitDirectories,
+  type RunProcessInfo,
+} from './features/status/run-processes.ts';
 import type { StatusPane } from './features/status/status.ts';
 import { initialCwd, localHostname } from './features/terminal/pty-client.ts';
 import { terminals } from './features/terminal/terminal-registry.ts';
@@ -119,18 +123,21 @@ const statusPane = computed<StatusPane | undefined>(() => {
 });
 const runProcesses = ref<RunProcessInfo[]>([]);
 const activeCwds = computed(() => splitDirectories(store.panes));
+// A string only changes when the folders do, not on every pane update (e.g.
+// a title spinner), so the watcher below does not re-query on those.
+const activeCwdsKey = computed(() => activeCwds.value.join('\0'));
 
 async function refreshRunProcesses() {
   const cwds = activeCwds.value;
-  if (cwds.length === 0) {
-    runProcesses.value = [];
-    return;
+  let next: RunProcessInfo[] = [];
+  if (cwds.length > 0) {
+    try {
+      next = await runProcessesClient.detect(cwds);
+    } catch {
+      next = [];
+    }
   }
-  try {
-    runProcesses.value = await runProcessesClient.detect(cwds);
-  } catch {
-    runProcesses.value = [];
-  }
+  if (!sameRunProcesses(runProcesses.value, next)) runProcesses.value = next;
 }
 
 let runProcessesTimer: ReturnType<typeof setInterval> | undefined;
@@ -541,7 +548,7 @@ function onUnhandledRejection(event: PromiseRejectionEvent) {
   errorStore.report(event.reason);
 }
 
-watch(activeCwds, () => {
+watch(activeCwdsKey, () => {
   void refreshRunProcesses();
 });
 

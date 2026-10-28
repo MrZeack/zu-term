@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import {
   formatRunProcessesSummary,
   formatRunProcessesTooltip,
+  sameRunProcesses,
   splitDirectories,
   type RunProcessInfo,
 } from './run-processes.ts';
@@ -61,4 +63,23 @@ test('genera el tooltip descriptivo con PIDs y rutas de proyectos', () => {
   assert.ok(tooltip?.includes('Procesos en .run:'));
   assert.ok(tooltip?.includes('• desktop (PID 5821) · ~/personal/zu-term'));
   assert.ok(tooltip?.includes('• backend (PID 8080) · ~/work/api'));
+});
+
+test('compara resultados de procesos por nombre, PID y carpeta, en orden', () => {
+  const api = { name: 'api', pid: 10, projectDir: '/repo' };
+  const web = { name: 'web', pid: 11, projectDir: '/repo' };
+
+  assert.equal(sameRunProcesses([api, web], [{ ...api }, { ...web }]), true);
+  assert.equal(sameRunProcesses([], []), true);
+  assert.equal(sameRunProcesses([api], [api, web]), false);
+  assert.equal(sameRunProcesses([api], [{ ...api, pid: 12 }]), false);
+  assert.equal(sameRunProcesses([api, web], [web, api]), false);
+});
+
+test('App.vue solo vuelve a consultar procesos cuando cambian las carpetas de los splits', async () => {
+  const appSource = await readFile(new URL('../../App.vue', import.meta.url), 'utf8');
+
+  assert.match(appSource, /watch\(activeCwdsKey,/);
+  assert.doesNotMatch(appSource, /watch\(activeCwds,/);
+  assert.match(appSource, /if \(!sameRunProcesses\(runProcesses\.value, next\)\)/);
 });
