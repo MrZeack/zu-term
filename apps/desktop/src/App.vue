@@ -64,6 +64,7 @@ import {
   loadWorkspaceCatalog,
   MAX_WORKSPACES,
   reconcileWorkspaceCatalog,
+  renameWorkspace,
   setActiveWorkspace,
   upsertWorkspace,
   windowTitleForWorkspace,
@@ -92,7 +93,8 @@ watch(closePromptVisible, (visible) => {
 });
 const workspaceCatalog = ref<WorkspaceCatalog>(createWorkspaceCatalog());
 const workspaceDialogVisible = ref(false);
-const workspaceDialogMode = ref<'new' | 'save'>('new');
+const workspaceDialogMode = ref<'new' | 'save' | 'rename'>('new');
+const renamingWorkspaceId = ref<string | null>(null);
 const workspaceError = computed({
   get: () => errorStore.latestError?.message,
   set: (val: string | undefined) => {
@@ -152,14 +154,29 @@ async function refreshRunProcesses() {
 }
 
 let runProcessesTimer: ReturnType<typeof setInterval> | undefined;
-const workspaceDialogTitle = computed(() =>
-  workspaceDialogMode.value === 'new' ? 'Nuevo workspace' : 'Guardar workspace',
-);
-const workspaceDialogDescription = computed(() =>
-  workspaceDialogMode.value === 'new'
-    ? 'Crea un espacio para guardar esta distribución y sus agentes.'
-    : 'Asigna un nombre al workspace actual para poder restaurarlo después.',
-);
+const workspaceDialogInitialName = computed(() => {
+  if (workspaceDialogMode.value === 'rename' && renamingWorkspaceId.value) {
+    return findWorkspace(workspaceCatalog.value, renamingWorkspaceId.value)?.name ?? '';
+  }
+  if (workspaceDialogMode.value === 'save') {
+    return activeWorkspaceName.value ?? '';
+  }
+  return '';
+});
+const workspaceDialogTitle = computed(() => {
+  if (workspaceDialogMode.value === 'new') return 'Nuevo workspace';
+  if (workspaceDialogMode.value === 'save') return 'Guardar workspace';
+  return 'Renombrar workspace';
+});
+const workspaceDialogDescription = computed(() => {
+  if (workspaceDialogMode.value === 'new') {
+    return 'Crea un espacio para guardar esta distribución y sus agentes.';
+  }
+  if (workspaceDialogMode.value === 'save') {
+    return 'Asigna un nombre al workspace actual para poder restaurarlo después.';
+  }
+  return 'Asigna un nuevo nombre a este workspace.';
+});
 const densityStyle = {
   '--toolbar-height': `${UI_DENSITY.toolbarHeight}px`,
   '--toolbar-font-size': `${UI_DENSITY.toolbarFontSize}px`,
@@ -358,8 +375,18 @@ async function saveCurrentWorkspace(name?: string): Promise<boolean> {
 }
 
 function openWorkspaceDialog(mode: 'new' | 'save') {
+  renamingWorkspaceId.value = null;
   workspaceError.value = undefined;
   workspaceDialogMode.value = mode;
+  workspaceDialogVisible.value = true;
+}
+
+function startRenameWorkspace(id: string) {
+  const workspace = findWorkspace(workspaceCatalog.value, id);
+  if (!workspace) return;
+  renamingWorkspaceId.value = id;
+  workspaceError.value = undefined;
+  workspaceDialogMode.value = 'rename';
   workspaceDialogVisible.value = true;
 }
 
@@ -371,6 +398,31 @@ async function saveWorkspaceFromMenu() {
     await saveCurrentWorkspace();
   } else {
     openWorkspaceDialog('save');
+  }
+}
+
+async function renameWorkspaceAction(id: string, newName: string): Promise<boolean> {
+  await reloadWorkspaces();
+  const workspace = findWorkspace(workspaceCatalog.value, id);
+  if (!workspace) return false;
+  const trimmed = newName.trim();
+  if (!trimmed) return false;
+  if (workspace.name === trimmed) return true;
+
+  const isActive = workspaceCatalog.value.activeId === id;
+  const ownsLock = isActive;
+  if (!ownsLock && !(await session.acquire(id))) return false;
+
+  try {
+    const updated = renameWorkspace(workspaceCatalog.value, id, trimmed);
+    if (await persistWorkspace(id, updated)) {
+      return true;
+    }
+    return false;
+  } finally {
+    if (!ownsLock) {
+      await session.release(id);
+    }
   }
 }
 
@@ -401,11 +453,18 @@ async function createNewWorkspace(name: string): Promise<boolean> {
 }
 
 async function submitWorkspaceName(name: string) {
-  const saved =
-    workspaceDialogMode.value === 'new'
-      ? await createNewWorkspace(name)
-      : await saveCurrentWorkspace(name);
-  if (saved) workspaceDialogVisible.value = false;
+  let saved = false;
+  if (workspaceDialogMode.value === 'new') {
+    saved = await createNewWorkspace(name);
+  } else if (workspaceDialogMode.value === 'save') {
+    saved = await saveCurrentWorkspace(name);
+  } else if (workspaceDialogMode.value === 'rename' && renamingWorkspaceId.value) {
+    saved = await renameWorkspaceAction(renamingWorkspaceId.value, name);
+  }
+  if (saved) {
+    workspaceDialogVisible.value = false;
+    renamingWorkspaceId.value = null;
+  }
 }
 
 async function restoreWorkspace(id: string) {
@@ -590,6 +649,7 @@ onBeforeUnmount(() => {
         :error="workspaceError"
         :busy="workspaceOperation.busy"
         @save="saveWorkspaceFromMenu"
+        @rename="startRenameWorkspace"
         @new="openWorkspaceDialog('new')"
         @select="restoreWorkspace"
         @delete="deleteWorkspace"
@@ -727,8 +787,12 @@ onBeforeUnmount(() => {
       :visible="workspaceDialogVisible"
       :title="workspaceDialogTitle"
       :description="workspaceDialogDescription"
+      :initial-name="workspaceDialogInitialName"
       :error="workspaceError"
-      @cancel="workspaceDialogVisible = false"
+      @cancel="
+        workspaceDialogVisible = false;
+        renamingWorkspaceId = null;
+      "
       @submit="submitWorkspaceName"
     />
   </main>

@@ -13,6 +13,7 @@ import {
   setActiveWorkspace,
   upsertWorkspace,
   reconcileWorkspaceCatalog,
+  renameWorkspace,
   windowTitleForWorkspace,
   type WorkspaceCatalog,
   type WorkspaceStorage,
@@ -282,4 +283,40 @@ test('windowTitleForWorkspace devuelve el nombre del workspace o Zu Term por def
   assert.equal(windowTitleForWorkspace(undefined), 'Zu Term');
   assert.equal(windowTitleForWorkspace(null), 'Zu Term');
   assert.equal(windowTitleForWorkspace(undefined, 'Custom'), 'Custom');
+});
+
+test('renameWorkspace actualiza el nombre del workspace recortando espacios y actualiza updatedAt', () => {
+  const snapshot = createWorkspaceSnapshot(root, panes, 'pane-1');
+  const catalog: WorkspaceCatalog = {
+    version: 1,
+    activeId: 'ws-1',
+    workspaces: [
+      createWorkspaceRecord('ws-1', 'Nombre Antiguo', snapshot, 100),
+      createWorkspaceRecord('ws-2', 'Otro Workspace', snapshot, 100),
+    ],
+  };
+
+  const updated = renameWorkspace(catalog, 'ws-1', '  Nuevo Nombre  ', 250);
+
+  assert.equal(updated.activeId, 'ws-1');
+  assert.equal(updated.workspaces[0]?.name, 'Nuevo Nombre');
+  assert.equal(updated.workspaces[0]?.updatedAt, 250);
+  assert.equal(updated.workspaces[1]?.name, 'Otro Workspace');
+  assert.deepEqual(updated.workspaces[0]?.snapshot, snapshot);
+});
+
+test('renameWorkspace ignora nombres vacíos o IDs inexistentes', () => {
+  const snapshot = createWorkspaceSnapshot(root, panes, 'pane-1');
+  const catalog: WorkspaceCatalog = {
+    version: 1,
+    activeId: 'ws-1',
+    workspaces: [createWorkspaceRecord('ws-1', 'Nombre Actual', snapshot, 100)],
+  };
+
+  const empty = renameWorkspace(catalog, 'ws-1', '   ', 200);
+  assert.equal(empty.workspaces[0]?.name, 'Nombre Actual');
+  assert.equal(empty.workspaces[0]?.updatedAt, 100);
+
+  const missing = renameWorkspace(catalog, 'ws-inexistente', 'Nuevo Nombre', 200);
+  assert.equal(missing.workspaces[0]?.name, 'Nombre Actual');
 });

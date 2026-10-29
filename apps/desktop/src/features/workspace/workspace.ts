@@ -270,6 +270,27 @@ export function deleteWorkspace(catalog: WorkspaceCatalog, id: string): Workspac
   };
 }
 
+export function renameWorkspace(
+  catalog: WorkspaceCatalog,
+  id: string,
+  name: string,
+  updatedAt = Date.now(),
+): WorkspaceCatalog {
+  const index = catalog.workspaces.findIndex((workspace) => workspace.id === id);
+  if (index === -1) return catalog;
+  const current = catalog.workspaces[index]!;
+  const normalizedName = workspaceName(name);
+  if (!normalizedName) return catalog;
+  const updated: WorkspaceRecord = {
+    ...current,
+    name: normalizedName,
+    updatedAt,
+  };
+  const workspaces = [...catalog.workspaces];
+  workspaces[index] = updated;
+  return { ...catalog, workspaces };
+}
+
 export function reconcileWorkspaceCatalog(
   current: WorkspaceCatalog,
   fromDisk: WorkspaceCatalog,

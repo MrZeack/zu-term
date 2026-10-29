@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { nextTick, ref, useTemplateRef, watch } from 'vue';
 
 const props = defineProps<{
   visible: boolean;
@@ -15,11 +15,16 @@ const emit = defineEmits<{
 }>();
 
 const draft = ref('');
+const input = useTemplateRef<HTMLInputElement>('input');
 
 watch(
   () => props.visible,
-  (visible) => {
-    if (visible) draft.value = props.initialName ?? '';
+  async (visible) => {
+    if (visible) {
+      draft.value = props.initialName ?? '';
+      await nextTick();
+      input.value?.select();
+    }
   },
 );
 
@@ -44,6 +49,7 @@ function submit() {
         <label for="workspace-name">Nombre</label>
         <input
           id="workspace-name"
+          ref="input"
           v-model="draft"
           maxlength="80"
           autocomplete="off"

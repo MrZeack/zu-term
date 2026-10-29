@@ -15,6 +15,7 @@ const emit = defineEmits<{
   new: [];
   select: [id: string];
   delete: [id: string];
+  rename: [id: string];
   open: [];
 }>();
 
@@ -84,6 +85,16 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', closeOnOutside
         Guardar workspace
       </button>
       <button
+        v-if="activeId"
+        class="workspace-menu__action"
+        type="button"
+        :disabled="busy"
+        @click="closeAnd(() => activeId && emit('rename', activeId))"
+      >
+        <span aria-hidden="true">✎</span>
+        Renombrar workspace
+      </button>
+      <button
         class="workspace-menu__action"
         type="button"
         :disabled="busy"
@@ -106,6 +117,16 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', closeOnOutside
           >
             <strong>{{ workspace.name }}</strong>
             <small>{{ paneIds(workspace.snapshot.root).length }} splits</small>
+          </button>
+          <button
+            class="workspace-rename"
+            type="button"
+            :disabled="busy"
+            :aria-label="`Renombrar workspace ${workspace.name}`"
+            :title="`Renombrar workspace ${workspace.name}`"
+            @click="closeAnd(() => emit('rename', workspace.id))"
+          >
+            <span aria-hidden="true">✎</span>
           </button>
           <button
             class="workspace-delete"
@@ -215,6 +236,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', closeOnOutside
 
 .workspace-menu__action,
 .workspace-option,
+.workspace-rename,
 .workspace-delete {
   border: 0;
   color: var(--text);
@@ -299,6 +321,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', closeOnOutside
   font-size: 10px;
 }
 
+.workspace-rename,
 .workspace-delete {
   width: 26px;
   border-radius: 7px;
@@ -306,6 +329,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', closeOnOutside
   font-size: 15px;
 }
 
+.workspace-rename:hover,
 .workspace-delete:hover {
   color: var(--text);
   background: var(--accent-alt-soft);
