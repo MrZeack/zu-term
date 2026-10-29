@@ -239,7 +239,13 @@ onBeforeUnmount(() => {
 .terminal {
   flex: 1;
   min-height: 0;
-  padding: 8px 8px 10px;
+  overflow: hidden;
   background: var(--pane-bg);
+}
+
+.terminal :deep(.xterm) {
+  height: 100%;
+  box-sizing: border-box;
+  padding: 8px 8px 10px;
 }
 </style>
