@@ -80,11 +80,9 @@ _zu_term_preexec() {
   else
     _zu_term_emit_command ''
   fi
-  local agent_payload
-  agent_payload="$(_zu_term_agent_payload "${words[@]}")"
-  if [[ -n "$agent_payload" ]]; then
-    _zu_term_emit_agent "$agent_payload"
-  fi
+  # Always report: an empty payload clears the agent, so only an agent that
+  # was the last command run in the pane is restored.
+  _zu_term_emit_agent "$(_zu_term_agent_payload "${words[@]}")"
 }
 
 _zu_term_precmd() {

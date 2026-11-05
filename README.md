@@ -78,7 +78,7 @@ La configuración se guarda en `~/.config/zu-term/config.json`; los historiales 
 
 Al cerrar una ventana, Zu Term pregunta si debe guardar el workspace. `Cerrar y guardar workspace` guarda el workspace activo; `Cerrar sin guardar workspace` descarta los cambios desde el último guardado sin eliminar los workspaces guardados.
 
-Los agentes soportados son Codex, Claude Code, Kiro, Muse Code y Antigravity. Solo se restauran agentes ejecutados con un ID explícito: el workspace guarda ese ID y al restaurar ejecuta su comando de reanudación. Un agente sin ID no se guarda y su pane se restaura como una shell vacía. Los comandos usados son `codex resume <ID>`, `claude --resume <ID>`, `kiro-cli chat --resume-id <ID>`, `muse resume <ID>` y `agy --conversation <ID>`.
+Los agentes soportados son Codex, Claude Code, Kiro, Muse Code y Antigravity. Solo se restaura un agente ejecutado con un ID explícito y que sea el último comando del pane (cualquier otro comando posterior, como `make install`, lo descarta): el workspace guarda ese ID y al restaurar ejecuta su comando de reanudación. Un agente sin ID no se guarda y su pane se restaura como una shell vacía. Los comandos usados son `codex resume <ID>`, `claude --resume <ID>`, `kiro-cli chat --resume-id <ID>`, `muse resume <ID>` y `agy --conversation <ID>`.
 
 No se guardan procesos activos, comandos arbitrarios ni scrollback: la PTY se crea de nuevo y solo se relanza un agente de una lista permitida con un ID validado. El historial de comandos continúa siendo responsabilidad de zsh, pero cada pane recibe su propio `HISTFILE` bajo `~/.config/zu-term/history/`.
 

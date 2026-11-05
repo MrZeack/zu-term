@@ -33,7 +33,7 @@ check "reports kiro resume IDs" "$(_zu_term_preexec 'kiro-cli chat --resume-id k
 check "reports muse resume IDs" "$(_zu_term_preexec 'muse resume muse-123')" $'\e]1337;ZuTermCommand=muse\e\\\e]1337;ZuTermAgent=muse|muse-123\e\\'
 check "reports antigravity conversation IDs" "$(_zu_term_preexec 'agy --conversation conversation-123')" $'\e]1337;ZuTermCommand=agy\e\\\e]1337;ZuTermAgent=antigravity|conversation-123\e\\'
 check "starts antigravity without an explicit ID" "$(_zu_term_preexec 'agy --continue')" $'\e]1337;ZuTermCommand=agy\e\\\e]1337;ZuTermAgent=antigravity\e\\'
-check "preserves agent metadata on a normal command" "$(_zu_term_preexec 'ls -la')" $'\e]1337;ZuTermCommand=ls\e\\'
+check "clears the agent when the last command is not an agent" "$(_zu_term_preexec 'make install')" $'\e]1337;ZuTermCommand=make\e\\\e]1337;ZuTermAgent=\e\\'
 check "clears only command metadata at the prompt" "$(_zu_term_precmd)" $'\e]1337;ZuTermCommand=\e\\'
 
 rm -rf "${dir:h}"
