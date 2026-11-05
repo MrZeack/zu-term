@@ -7,3 +7,10 @@ allowBuilds:
 
 # Versions must be public for 2 days before install (supply-chain safety).
 minimumReleaseAge: 2880
+
+auditConfig:
+  ignoreGhsas:
+    # minimatch <11.0.1 (ReDoS via glob patterns): only ESLint uses it, with the
+    # repo's own patterns, and it is not shipped. No 10.x fix and ESLint needs
+    # ^10.2.6; remove once ESLint accepts minimatch 11.
+    - GHSA-g3hv-75wg-m249
