@@ -4,6 +4,8 @@ import type { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal } from '@xterm/xterm';
 import { onBeforeUnmount, onMounted, useTemplateRef, watch } from 'vue';
 import { UI_DENSITY } from '../../core/ui-density.ts';
+import { linkClient } from '../links/link-client.ts';
+import { attachTerminalLinks } from '../links/terminal-links.ts';
 import { buildAgentResumeCommand, type AgentState } from '../workspace/agent.ts';
 import { parseOsc7, parseZuTermAgent, parseZuTermCommand } from './osc.ts';
 import { ptyClient } from './pty-client.ts';
@@ -49,6 +51,9 @@ term.loadAddon(fit);
 
 let ptyId: number | undefined;
 let unmounted = false;
+// Folder that relative paths in the output are resolved against.
+let currentCwd = props.startCwd;
+let links: { dispose(): void } | undefined;
 let observer: ResizeObserver | undefined;
 let webgl: WebglAddon | undefined;
 let holdsWebglSlot = false;
@@ -115,7 +120,10 @@ onMounted(async () => {
 
   term.parser.registerOscHandler(7, (payload) => {
     const path = parseOsc7(payload, props.localHost);
-    if (path) emit('cwd', path);
+    if (path) {
+      currentCwd = path;
+      emit('cwd', path);
+    }
     return true;
   });
   term.parser.registerOscHandler(1337, (payload) => {
@@ -156,6 +164,10 @@ onMounted(async () => {
     getSelection: () => term.getSelection(),
     paste: (text) => term.paste(text),
     clear: () => term.clear(),
+  });
+  links = attachTerminalLinks(term, host.value, {
+    cwd: () => currentCwd,
+    open: (target, cwd) => linkClient.open(target, cwd).catch(report),
   });
   observer = new ResizeObserver(() => fitFrame.schedule());
   observer.observe(host.value);
@@ -224,6 +236,7 @@ onBeforeUnmount(() => {
   fitFrame.cancel();
   ptyResize.cancel();
   dropWebgl();
+  links?.dispose();
   window.removeEventListener(THEME_CHANGE_EVENT, updateTerminalTheme);
   terminals.unregister(props.paneId);
   if (ptyId !== undefined) ptyClient.kill(ptyId).catch(report);

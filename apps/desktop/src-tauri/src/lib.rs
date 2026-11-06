@@ -3,6 +3,7 @@ use tauri::{Emitter, Manager};
 mod config;
 mod dock;
 mod host;
+mod links;
 mod pty;
 mod run_processes;
 mod workspace_lock;
@@ -43,6 +44,7 @@ pub fn run() {
             workspace_lock::workspace_lock_release_all,
             host::local_hostname,
             host::initial_cwd,
+            links::open_link,
             pty::commands::pty_spawn,
             pty::commands::pty_write,
             pty::commands::pty_resize,

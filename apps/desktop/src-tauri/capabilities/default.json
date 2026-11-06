@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Zu Term windows: only what the UI calls (app commands, home dir, context menu, close, confirm dialog, text clipboard).",
+  "description": "Zu Term windows: only what the UI calls (app commands, open links, home dir, context menu, close, confirm dialog, text clipboard).",
   "windows": ["main", "zu-term-window-*"],
   "permissions": [
     "allow-config-read",
@@ -14,6 +14,7 @@
     "allow-workspace-lock-release-all",
     "allow-local-hostname",
     "allow-initial-cwd",
+    "allow-open-link",
     "allow-pty-spawn",
     "allow-pty-write",
     "allow-pty-resize",

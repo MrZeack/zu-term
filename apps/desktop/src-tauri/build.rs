@@ -10,6 +10,7 @@ const COMMANDS: &[&str] = &[
     "workspace_lock_release_all",
     "local_hostname",
     "initial_cwd",
+    "open_link",
     "pty_spawn",
     "pty_write",
     "pty_resize",

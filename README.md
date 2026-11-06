@@ -54,7 +54,9 @@ make uninstall       # la desinstala
 | Renombrar split      | —             | —                | doble clic en la cabecera o clic derecho |
 | Redimensionar        | —             | —                | arrastrar el borde                       |
 | Reorganizar split    | —             | —                | arrastrar la cabecera a otro split       |
+| Abrir enlace/archivo | —             | —                | `Ctrl`+clic sobre una URL o ruta         |
 
+- `Ctrl`+clic (también en macOS, donde sustituye al menú contextual sobre el enlace) abre URLs `http(s)` en el navegador y rutas existentes —absolutas, `~/`, relativas a la carpeta del split, con `:línea:columna` opcional, o enlaces OSC 8— con su app predeterminada. Ejecutables, scripts, apps e instaladores solo se muestran en Finder (en Linux, se abre su carpeta).
 - El split nuevo abre en la carpeta del split de origen; cerrar el último cierra la ventana.
 - La barra superior incluye botones para dividir a la derecha o hacia abajo; ambos actúan sobre el split activo.
 - La barra inferior reserva espacio fuera de la consola y muestra el split activo, ruta, comando/agente, workspace, cantidad de splits y dimensiones reales de la PTY.
@@ -100,6 +102,7 @@ Comprueba que funciona con `cd /tmp` seguido de un split: el nuevo split debe in
 - La UI solo tiene los permisos que invoca, incluidos los comandos propios declarados en `build.rs` ([capabilities](apps/desktop/src-tauri/capabilities/default.json)); CSP sin orígenes externos.
 - El backend valida tamaño de terminal, tamaño de escritura (≤ 1 MiB) y carpeta inicial (absoluta y existente; si no, el home). Cada PTY y cada lock pertenecen a la ventana que los creó, según su etiqueta de Tauri y no según un valor del cliente.
 - La entrada de cada PTY pasa por una cola acotada en su propio hilo: un proceso que no lee rechaza la escritura sin bloquear la UI ni otros panes.
+- Un enlace solo abre URLs `http(s)` o rutas existentes, sin shell (`/usr/bin/open` o `xdg-open`), y nunca ejecuta: lo que podría correr código al abrirse se muestra en el gestor de archivos.
 - `config.json` se reemplaza de forma atómica y los archivos privados se crean con permisos `0600`.
 - Dependencias JavaScript con versión exacta, lockfiles versionados y `minimumReleaseAge` de 2 días.
 
