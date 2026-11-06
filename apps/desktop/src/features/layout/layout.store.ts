@@ -5,11 +5,13 @@ import { createWorkspaceSnapshot, type WorkspaceSnapshot } from '../workspace/wo
 import {
   closePane,
   movePane,
+  movePaneToEdge,
   paneIds,
   setRatio,
   splitPane,
   type Direction,
   type DropZone,
+  type EdgeZone,
   type LayoutNode,
 } from './layout-tree.ts';
 
@@ -124,26 +126,36 @@ export function createLayoutStore(nextId: () => string) {
       root.value = setRatio(root.value, splitId, ratio);
     }
 
-    function move(sourceId: string, targetId: string, zone: DropZone): boolean {
-      if (sourceId === targetId || !panes.value[sourceId] || !panes.value[targetId]) return false;
-
+    function freeSplitId(): string {
       const usedIds = new Set<string>();
-      function collectIds(node: LayoutNode) {
+      const collectIds = (node: LayoutNode) => {
         usedIds.add(node.id);
         if (node.kind === 'split') {
           collectIds(node.first);
           collectIds(node.second);
         }
-      }
+      };
       collectIds(root.value);
       let splitId = nextId();
       while (usedIds.has(splitId)) splitId = nextId();
+      return splitId;
+    }
 
-      const next = movePane(root.value, sourceId, targetId, zone, splitId);
+    function applyMove(sourceId: string, next: LayoutNode): boolean {
       if (next === root.value) return false;
       root.value = next;
       activeId.value = sourceId;
       return true;
+    }
+
+    function move(sourceId: string, targetId: string, zone: DropZone): boolean {
+      if (sourceId === targetId || !panes.value[sourceId] || !panes.value[targetId]) return false;
+      return applyMove(sourceId, movePane(root.value, sourceId, targetId, zone, freeSplitId));
+    }
+
+    function moveToEdge(sourceId: string, zone: EdgeZone): boolean {
+      if (!panes.value[sourceId]) return false;
+      return applyMove(sourceId, movePaneToEdge(root.value, sourceId, zone, freeSplitId));
     }
 
     function reset(cwd: string) {
@@ -200,6 +212,7 @@ export function createLayoutStore(nextId: () => string) {
       focus,
       resize,
       move,
+      moveToEdge,
       reset,
       snapshot,
       restore,

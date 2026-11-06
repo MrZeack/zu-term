@@ -1,11 +1,10 @@
 // Binary split tree: each split shows `first` and `second` side by side
 // (`row`) or stacked (`column`), with `ratio` of the space for `first`.
-// Edge drops can lift a pane to the matching group boundary; center drops
-// only exchange the positions of two leaves.
-import { computeGeometry } from './layout-geometry.ts';
-
+// Dropping on a pane's edge splits that pane; on its center, swaps both.
+// Only `movePaneToEdge` lifts a pane to an edge of the whole layout.
 export type Direction = 'row' | 'column';
-export type DropZone = 'top' | 'right' | 'bottom' | 'left' | 'center';
+export type EdgeZone = 'top' | 'right' | 'bottom' | 'left';
+export type DropZone = EdgeZone | 'center';
 
 export type LayoutNode =
   | { kind: 'pane'; id: string }
@@ -173,6 +172,12 @@ function restoreGridIfPossible(
   return null;
 }
 
+function idAllocator(splitId: string | (() => string)): () => string {
+  if (typeof splitId === 'function') return splitId;
+  let counter = 0;
+  return () => (counter++ === 0 ? splitId : `${splitId}-${counter}`);
+}
+
 export function movePane(
   node: LayoutNode,
   paneId: string,
@@ -183,69 +188,48 @@ export function movePane(
   if (paneId === targetId || !containsPane(node, paneId) || !containsPane(node, targetId)) {
     return node;
   }
-
   if (zone === 'center') return swapPanePositions(node, paneId, targetId);
-
-  const geom = computeGeometry(node);
-  const targetPane = geom.panes.find((p) => p.id === targetId);
-  if (!targetPane) return node;
-
-  let counter = 0;
-  const allocateId =
-    typeof splitId === 'function'
-      ? splitId
-      : () => (counter++ === 0 ? splitId : `${splitId}-${counter}`);
 
   const withoutPane = closePane(node, paneId);
   if (!withoutPane) return node;
-
-  const isOuterBoundary =
-    (zone === 'left' && targetPane.rect.x <= 0.001) ||
-    (zone === 'right' && targetPane.rect.x + targetPane.rect.width >= 0.999) ||
-    (zone === 'top' && targetPane.rect.y <= 0.001) ||
-    (zone === 'bottom' && targetPane.rect.y + targetPane.rect.height >= 0.999);
-
-  if (isOuterBoundary) {
-    const direction = zone === 'left' || zone === 'right' ? 'row' : 'column';
-    const perpDirection = direction === 'row' ? 'column' : 'row';
-    const before = zone === 'left' || zone === 'top';
-    const remainingDirection = hasSplitInDirection(withoutPane, perpDirection)
-      ? perpDirection
-      : direction;
-    const balancedRemaining = balanceLinearTree(
-      paneIds(withoutPane),
-      remainingDirection,
-      allocateId,
-    );
-    return {
-      kind: 'split',
-      id: allocateId(),
-      direction,
-      ratio: 0.5,
-      first: before ? { kind: 'pane', id: paneId } : balancedRemaining,
-      second: before ? balancedRemaining : { kind: 'pane', id: paneId },
-    };
-  }
-
+  const allocateId = idAllocator(splitId);
   const direction = directionForDrop(zone);
-  const restored = restoreGridIfPossible(
-    withoutPane,
-    targetId,
-    direction,
-    { kind: 'pane', id: paneId },
-    zone,
-    allocateId,
+  const pane: LayoutNode = { kind: 'pane', id: paneId };
+  return (
+    restoreGridIfPossible(withoutPane, targetId, direction, pane, zone, allocateId) ??
+    insertPane(withoutPane, targetId, direction, pane, zone, allocateId())
   );
-  if (restored) return restored;
+}
 
-  return insertPane(
-    withoutPane,
-    targetId,
+// Puts the pane along a whole edge of the layout, with half of the space,
+// and lines up the other panes in the remaining half.
+export function movePaneToEdge(
+  node: LayoutNode,
+  paneId: string,
+  zone: EdgeZone,
+  splitId: string | (() => string),
+): LayoutNode {
+  if (!containsPane(node, paneId)) return node;
+  const withoutPane = closePane(node, paneId);
+  if (!withoutPane) return node;
+
+  const allocateId = idAllocator(splitId);
+  const direction = directionForDrop(zone);
+  const perpDirection = direction === 'row' ? 'column' : 'row';
+  const before = zone === 'left' || zone === 'top';
+  const remainingDirection = hasSplitInDirection(withoutPane, perpDirection)
+    ? perpDirection
+    : direction;
+  const remaining = balanceLinearTree(paneIds(withoutPane), remainingDirection, allocateId);
+  const pane: LayoutNode = { kind: 'pane', id: paneId };
+  return {
+    kind: 'split',
+    id: allocateId(),
     direction,
-    { kind: 'pane', id: paneId },
-    zone,
-    allocateId(),
-  );
+    ratio: 0.5,
+    first: before ? pane : remaining,
+    second: before ? remaining : pane,
+  };
 }
 
 export function closePane(node: LayoutNode, paneId: string): LayoutNode | null {

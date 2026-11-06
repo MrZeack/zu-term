@@ -76,6 +76,8 @@ test('permite reorganizar splits arrastrando una cabecera hacia una zona de drop
   assert.match(layoutSource, /dropZoneAt/);
   assert.match(layoutSource, /drop-center/);
   assert.match(layoutSource, /store\.move\(/);
+  assert.match(layoutSource, /layoutEdgeAt/);
+  assert.match(layoutSource, /store\.moveToEdge\(/);
 });
 
 test('pasa el historial estable de cada pane al proceso de la PTY', async () => {

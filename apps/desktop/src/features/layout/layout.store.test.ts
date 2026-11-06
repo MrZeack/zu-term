@@ -52,7 +52,7 @@ test('asigna un historial separado por pane y lo conserva al restaurar', () => {
   assert.equal(restored.panes[second]?.historyId, secondHistoryId);
 });
 
-test('move reorganiza el grupo completo, cambia la orientación y enfoca el pane movido', () => {
+test('move divide el pane destino, aunque toque el borde, y enfoca el pane movido', () => {
   const store = createLayoutStore(nextId)();
   store.init('/home/me');
   const [first] = paneIds(store.root);
@@ -64,10 +64,22 @@ test('move reorganiza el grupo completo, cambia la orientación y enfoca el pane
   assert.deepEqual(paneIds(store.root), [second, third, first]);
   assert.equal(store.activeId, first);
   assert.equal(store.root.kind === 'split' && store.root.direction, 'column');
-  assert.equal(
-    store.root.kind === 'split' && store.root.first.kind === 'split' && store.root.first.direction,
-    'column',
-  );
+  assert.equal(store.root.kind === 'split' && store.root.first.kind, 'pane');
+});
+
+test('moveToEdge lleva el pane al borde de la ventana y enfoca el pane movido', () => {
+  const store = createLayoutStore(nextId)();
+  store.init('/home/me');
+  const [first] = paneIds(store.root);
+  assert.ok(first);
+  const second = store.split(first, 'row');
+  const third = store.split(second, 'column');
+
+  assert.equal(store.moveToEdge(third, 'top'), true);
+  assert.deepEqual(paneIds(store.root), [third, first, second]);
+  assert.equal(store.root.kind === 'split' && store.root.direction, 'column');
+  assert.equal(store.activeId, third);
+  assert.equal(store.moveToEdge('missing', 'top'), false);
 });
 
 test('move intercambia dos posiciones al soltar en el centro del destino', () => {

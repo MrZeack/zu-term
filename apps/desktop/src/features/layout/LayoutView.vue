@@ -9,8 +9,8 @@ import TerminalPane from '../terminal/TerminalPane.vue';
 import { contextMenuPosition, type ContextMenuPosition } from '../context-menu/position.ts';
 import type { ThemeName } from '../theme/theme.ts';
 import { computeGeometry, ratioAt, type Divider, type Rect } from './layout-geometry.ts';
-import { dropZoneAt, type DropZone } from './layout-dnd.ts';
-import { movePane } from './layout-tree.ts';
+import { dropZoneAt, layoutEdgeAt, type DropZone, type EdgeZone } from './layout-dnd.ts';
+import { movePane, movePaneToEdge, type LayoutNode } from './layout-tree.ts';
 
 const props = defineProps<{
   home: string | undefined;
@@ -31,7 +31,9 @@ const store = useLayoutStore();
 const container = useTemplateRef<HTMLDivElement>('container');
 const geometry = computed(() => computeGeometry(store.root));
 const draggedPaneId = ref<string | null>(null);
-const dropTarget = ref<{ paneId: string; zone: DropZone } | null>(null);
+// `paneId: null`: the pane goes along that edge of the whole layout.
+type DropTarget = { paneId: string; zone: DropZone } | { paneId: null; zone: EdgeZone };
+const dropTarget = ref<DropTarget | null>(null);
 
 const pct = (n: number) => `${n * 100}%`;
 const paneStyle = (rect: Rect) => ({
@@ -95,111 +97,76 @@ function endPaneDrag() {
   dropTarget.value = null;
 }
 
-function zoneAtEvent(event: DragEvent): DropZone | null {
-  const element = event.currentTarget as HTMLElement | null;
-  if (!element) return null;
-  const rect = element.getBoundingClientRect();
-  return dropZoneAt(
-    { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
-    event.clientX,
-    event.clientY,
-  );
-}
-
-function dragOverPane(paneId: string, event: DragEvent) {
-  if (!draggedPaneId.value || draggedPaneId.value === paneId) {
-    dropTarget.value = null;
-    return;
-  }
-  const zone = zoneAtEvent(event);
-  if (!zone) {
-    dropTarget.value = null;
-    return;
-  }
-  if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
-  dropTarget.value = { paneId, zone };
-}
-
-function dragLeavePane(paneId: string, event: DragEvent) {
-  const element = event.currentTarget as HTMLElement | null;
-  const related = event.relatedTarget;
-  if (element && related && element.contains(related as Node)) return;
-  if (dropTarget.value?.paneId === paneId) dropTarget.value = null;
-}
-
-function dropPane(targetId: string, event: DragEvent) {
-  const sourceId = draggedPaneId.value;
-  const zone = zoneAtEvent(event);
-  if (sourceId && zone && sourceId !== targetId) store.move(sourceId, targetId, zone);
-  endPaneDrag();
-}
-
-function paneAtPoint(clientX: number, clientY: number): { paneId: string; zone: DropZone } | null {
+function dropTargetAt(clientX: number, clientY: number): DropTarget | null {
   const box = container.value?.getBoundingClientRect();
   if (!box || box.width <= 0 || box.height <= 0) return null;
+  const edge = layoutEdgeAt(box, clientX, clientY);
+  if (edge) return { paneId: null, zone: edge };
+
   const relX = (clientX - box.left) / box.width;
   const relY = (clientY - box.top) / box.height;
-
-  for (const { id, rect } of geometry.value.panes) {
-    if (
+  const hit = geometry.value.panes.find(
+    ({ rect }) =>
       relX >= rect.x &&
       relX <= rect.x + rect.width &&
       relY >= rect.y &&
-      relY <= rect.y + rect.height
-    ) {
-      const paneLeft = box.left + rect.x * box.width;
-      const paneTop = box.top + rect.y * box.height;
-      const paneWidth = rect.width * box.width;
-      const paneHeight = rect.height * box.height;
-      const zone = dropZoneAt(
-        { left: paneLeft, top: paneTop, width: paneWidth, height: paneHeight },
-        clientX,
-        clientY,
-      );
-      if (zone) return { paneId: id, zone };
-    }
-  }
-  return null;
+      relY <= rect.y + rect.height,
+  );
+  if (!hit || hit.id === draggedPaneId.value) return null;
+  const zone = dropZoneAt(
+    {
+      left: box.left + hit.rect.x * box.width,
+      top: box.top + hit.rect.y * box.height,
+      width: hit.rect.width * box.width,
+      height: hit.rect.height * box.height,
+    },
+    clientX,
+    clientY,
+  );
+  return zone ? { paneId: hit.id, zone } : null;
+}
+
+function movedTree(root: LayoutNode, sourceId: string, target: DropTarget): LayoutNode {
+  return target.paneId === null
+    ? movePaneToEdge(root, sourceId, target.zone, 'preview')
+    : movePane(root, sourceId, target.paneId, target.zone, 'preview');
 }
 
 function dragOverContainer(event: DragEvent) {
   if (!draggedPaneId.value) return;
-  const target = paneAtPoint(event.clientX, event.clientY);
-  if (!target || target.paneId === draggedPaneId.value) {
-    dropTarget.value = null;
-    return;
-  }
-  if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+  const target = dropTargetAt(event.clientX, event.clientY);
+  if (event.dataTransfer) event.dataTransfer.dropEffect = target ? 'move' : 'none';
   dropTarget.value = target;
 }
 
+// WebKit may report a null `relatedTarget` while still inside, so only a
+// pointer outside the layout clears the target; `dragend` ends the drag.
 function dragLeaveContainer(event: DragEvent) {
-  const element = container.value;
-  const related = event.relatedTarget;
-  if (element && related && element.contains(related as Node)) return;
-  endPaneDrag();
+  const box = container.value?.getBoundingClientRect();
+  if (!box) return;
+  const inside =
+    event.clientX > box.left &&
+    event.clientX < box.right &&
+    event.clientY > box.top &&
+    event.clientY < box.bottom;
+  if (!inside) dropTarget.value = null;
 }
 
 function dropContainer(event: DragEvent) {
   const sourceId = draggedPaneId.value;
-  const target = dropTarget.value ?? paneAtPoint(event.clientX, event.clientY);
-  if (sourceId && target && sourceId !== target.paneId) {
-    store.move(sourceId, target.paneId, target.zone);
+  const target = dropTargetAt(event.clientX, event.clientY) ?? dropTarget.value;
+  if (sourceId && target) {
+    if (target.paneId === null) store.moveToEdge(sourceId, target.zone);
+    else store.move(sourceId, target.paneId, target.zone);
   }
   endPaneDrag();
 }
 
 const dropPreviewRect = computed<Rect | null>(() => {
-  if (!draggedPaneId.value || !dropTarget.value) return null;
-  const { paneId: targetId, zone } = dropTarget.value;
-  if (draggedPaneId.value === targetId) return null;
-  try {
-    const previewTree = movePane(store.root, draggedPaneId.value, targetId, zone, 'preview');
-    const geom = computeGeometry(previewTree);
-    return geom.panes.find((p) => p.id === draggedPaneId.value)?.rect ?? null;
-  } catch {
-    return null;
-  }
+  const sourceId = draggedPaneId.value;
+  if (!sourceId || !dropTarget.value) return null;
+  const preview = computeGeometry(movedTree(store.root, sourceId, dropTarget.value));
+  return preview.panes.find((pane) => pane.id === sourceId)?.rect ?? null;
 });
 </script>
 
@@ -219,9 +186,6 @@ const dropPreviewRect = computed<Rect | null>(() => {
       :style="paneStyle(rect)"
       @mousedown="store.focus(id)"
       @contextmenu.prevent="openMenu(id, $event)"
-      @dragover.prevent="dragOverPane(id, $event)"
-      @dragleave="dragLeavePane(id, $event)"
-      @drop.prevent="dropPane(id, $event)"
     >
       <PaneHeader
         :title="paneTitle(store.panes[id] ?? {})"

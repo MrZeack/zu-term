@@ -57,6 +57,7 @@ make uninstall       # la desinstala
 | Abrir enlace/archivo | —             | —                | `Ctrl`+clic sobre una URL o ruta         |
 
 - `Ctrl`+clic (también en macOS, donde sustituye al menú contextual sobre el enlace) abre URLs `http(s)` en el navegador y rutas existentes —absolutas, `~/`, relativas a la carpeta del split, con `:línea:columna` opcional, o enlaces OSC 8— con su app predeterminada. Ejecutables, scripts, apps e instaladores solo se muestran en Finder (en Linux, se abre su carpeta).
+- Al arrastrar la cabecera, soltar en un borde de otro split lo divide en ese lado y soltar en su centro intercambia ambos; la franja junto al borde de la ventana lleva el split a todo ese borde.
 - El split nuevo abre en la carpeta del split de origen; cerrar el último cierra la ventana.
 - La barra superior incluye botones para dividir a la derecha o hacia abajo; ambos actúan sobre el split activo.
 - La barra inferior reserva espacio fuera de la consola y muestra el split activo, ruta, comando/agente, workspace, cantidad de splits y dimensiones reales de la PTY.

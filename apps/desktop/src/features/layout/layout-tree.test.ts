@@ -4,6 +4,7 @@ import { computeGeometry } from './layout-geometry.ts';
 import {
   closePane,
   movePane,
+  movePaneToEdge,
   paneIds,
   setRatio,
   splitPane,
@@ -64,7 +65,7 @@ test('movePane conserva el resto del árbol al mover un pane anidado', () => {
   );
 });
 
-test('movePane puede sacar un pane de una columna y llevarlo al borde del grupo equilibrando los otros 3 a 1/6', () => {
+test('movePaneToEdge saca un pane de una columna y lo lleva al borde de la ventana equilibrando los otros 3 a 1/6', () => {
   const grid: LayoutNode = {
     kind: 'split',
     id: 'root',
@@ -88,7 +89,7 @@ test('movePane puede sacar un pane de una columna y llevarlo al borde del grupo 
     },
   };
 
-  const moved = movePane(grid, 'c', 'a', 'left', 'outer');
+  const moved = movePaneToEdge(grid, 'c', 'left', 'outer');
 
   assert.deepEqual(paneIds(moved), ['c', 'a', 'b', 'd']);
   assert.equal(moved.kind, 'split');
@@ -107,7 +108,7 @@ test('movePane puede sacar un pane de una columna y llevarlo al borde del grupo 
   }
 });
 
-test('movePane al borde superior o derecho equilibra los otros 3 a 1/6', () => {
+test('movePaneToEdge al borde superior o derecho equilibra los otros 3 a 1/6', () => {
   const grid: LayoutNode = {
     kind: 'split',
     id: 'root',
@@ -131,7 +132,7 @@ test('movePane al borde superior o derecho equilibra los otros 3 a 1/6', () => {
     },
   };
 
-  const movedTop = movePane(grid, 'd', 'a', 'top', 'outer-top');
+  const movedTop = movePaneToEdge(grid, 'd', 'top', 'outer-top');
   const geomTop = computeGeometry(movedTop);
   const dPane = geomTop.panes.find((p) => p.id === 'd');
   assert.ok(dPane);
@@ -143,7 +144,7 @@ test('movePane al borde superior o derecho equilibra los otros 3 a 1/6', () => {
     assert.ok(Math.abs(area - 1 / 6) < 0.001);
   }
 
-  const movedRight = movePane(grid, 'a', 'c', 'right', 'outer-right');
+  const movedRight = movePaneToEdge(grid, 'a', 'right', 'outer-right');
   const geomRight = computeGeometry(movedRight);
   const aPane = geomRight.panes.find((p) => p.id === 'a');
   assert.ok(aPane);
@@ -179,7 +180,7 @@ test('movePane puede devolver el pane a una cuadrícula equilibrada', () => {
       second: { kind: 'pane', id: 'd' },
     },
   };
-  const pulledOut = movePane(grid, 'c', 'a', 'left', 'outer');
+  const pulledOut = movePaneToEdge(grid, 'c', 'left', 'outer');
   const restored = movePane(pulledOut, 'c', 'd', 'top', 'restore');
 
   assert.deepEqual(paneIds(restored), ['a', 'b', 'c', 'd']);
@@ -196,6 +197,50 @@ test('movePane puede devolver el pane a una cuadrícula equilibrada', () => {
       : undefined,
     'column',
   );
+});
+
+test('movePane divide el split destino aunque comparta columna y toque el borde de la ventana', () => {
+  // (a / d) | (b / c): b toca los bordes superior y derecho de la ventana.
+  const tree: LayoutNode = {
+    kind: 'split',
+    id: 'root',
+    direction: 'row',
+    ratio: 0.5,
+    first: {
+      kind: 'split',
+      id: 'left',
+      direction: 'column',
+      ratio: 0.5,
+      first: { kind: 'pane', id: 'a' },
+      second: { kind: 'pane', id: 'd' },
+    },
+    second: {
+      kind: 'split',
+      id: 'right',
+      direction: 'column',
+      ratio: 0.5,
+      first: { kind: 'pane', id: 'b' },
+      second: { kind: 'pane', id: 'c' },
+    },
+  };
+  const rectOf = (node: LayoutNode, id: string) =>
+    computeGeometry(node).panes.find((pane) => pane.id === id)?.rect;
+
+  const top = movePane(tree, 'a', 'b', 'top', 's1');
+  assert.deepEqual(paneIds(top), ['d', 'a', 'b', 'c']);
+  assert.deepEqual(rectOf(top, 'a'), { x: 0.5, y: 0, width: 0.5, height: 0.25 });
+  assert.deepEqual(rectOf(top, 'c'), { x: 0.5, y: 0.5, width: 0.5, height: 0.5 });
+
+  const right = movePane(tree, 'a', 'b', 'right', 's1');
+  assert.deepEqual(rectOf(right, 'a'), { x: 0.75, y: 0, width: 0.25, height: 0.5 });
+  assert.deepEqual(rectOf(right, 'b'), { x: 0.5, y: 0, width: 0.25, height: 0.5 });
+  assert.deepEqual(rectOf(right, 'd'), { x: 0, y: 0, width: 0.5, height: 1 });
+});
+
+test('movePaneToEdge no cambia el árbol con un pane inexistente o si es el único', () => {
+  const tree = splitPane(single, 'a', 'row', 'b', 's1');
+  assert.equal(movePaneToEdge(tree, 'missing', 'left', 's2'), tree);
+  assert.equal(movePaneToEdge(single, 'a', 'left', 's2'), single);
 });
 
 test('movePane rechaza mover al mismo pane o usar panes inexistentes', () => {
