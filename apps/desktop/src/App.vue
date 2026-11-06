@@ -117,7 +117,8 @@ watch(
   windowTitle,
   (title) => {
     document.title = title;
-    void appWindow.setTitle(title).catch(report);
+    // `immediate` runs this before `report` is defined below.
+    void appWindow.setTitle(title).catch((error: unknown) => errorStore.report(error));
   },
   { immediate: true },
 );

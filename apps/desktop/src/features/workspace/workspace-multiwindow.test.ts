@@ -74,3 +74,15 @@ test('App.vue actualiza el título de la ventana con el workspace activo o Zu Te
   assert.match(appSource, /appWindow\.setTitle/);
   assert.match(appSource, /document\.title\s*=/);
 });
+
+test('el título de la ventana no usa report antes de definirlo (watch inmediato)', async () => {
+  const appSource = await readFile(new URL('../../App.vue', import.meta.url), 'utf8');
+  const titleWatch = appSource.indexOf('watch(\n  windowTitle,');
+  const reportDefinition = appSource.indexOf('const report =');
+
+  assert.ok(titleWatch >= 0 && reportDefinition >= 0);
+  assert.ok(
+    !appSource.slice(0, reportDefinition).includes('catch(report)'),
+    'an immediate watcher would read `report` in its temporal dead zone',
+  );
+});
