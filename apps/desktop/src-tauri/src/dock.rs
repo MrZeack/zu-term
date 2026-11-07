@@ -77,6 +77,9 @@ mod macos {
         .title("Zu Term")
         .inner_size(1280.0, 800.0)
         .min_inner_size(480.0, 320.0)
+        // Tauri's file drop handler would swallow the page's HTML5 drag
+        // events (reordering splits), as in `tauri.conf.json`.
+        .disable_drag_drop_handler()
         .build();
         if let Err(error) = result {
             eprintln!("No se pudo abrir una ventana nueva desde el Dock: {error}");
