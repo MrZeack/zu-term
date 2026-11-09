@@ -59,3 +59,17 @@ test('cálculo de dimensiones de FitAddon no desborda cuando el padding está en
     `El caso corregido encaja dentro del contenedor: ${fixedTotalHeight}px <= ${parentHeight}px`,
   );
 });
+
+// Fits that happen while `pty_spawn` is pending (layout, fonts) are dropped
+// by `ptyResize` because there is no PTY yet: without this, programs such as
+// nano draw for the spawn size until the next resize.
+test('al terminar pty_spawn envía el tamaño actual si cambió durante el arranque', async () => {
+  const source = await readFile(new URL('./TerminalPane.vue', import.meta.url), 'utf8');
+
+  assert.match(source, /const spawnSize = \{ cols: term\.cols, rows: term\.rows \};/);
+  assert.match(source, /spawnSize\.cols,\s*spawnSize\.rows,/);
+  assert.match(
+    source,
+    /ptyId = id;\s*(?:\/\/.*\s*)?if \(term\.cols !== spawnSize\.cols \|\| term\.rows !== spawnSize\.rows\) \{\s*ptyClient\.resize\(id, term\.cols, term\.rows\)\.catch\(report\);/,
+  );
+});

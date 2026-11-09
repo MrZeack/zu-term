@@ -173,11 +173,12 @@ onMounted(async () => {
   observer.observe(host.value);
 
   try {
+    const spawnSize = { cols: term.cols, rows: term.rows };
     const id = await ptyClient.spawn(
       props.startCwd,
       props.historyId,
-      term.cols,
-      term.rows,
+      spawnSize.cols,
+      spawnSize.rows,
       (event) => {
         if (event.event === 'output') term.write(event.data);
         else emit('exit');
@@ -186,6 +187,10 @@ onMounted(async () => {
     if (unmounted) ptyClient.kill(id).catch(report);
     else {
       ptyId = id;
+      // Fits made while spawning (layout, fonts) found no PTY to resize.
+      if (term.cols !== spawnSize.cols || term.rows !== spawnSize.rows) {
+        ptyClient.resize(id, term.cols, term.rows).catch(report);
+      }
       const resume = props.restoreAgent && buildAgentResumeCommand(props.restoreAgent);
       if (resume) ptyClient.write(id, `${resume}\n`).catch(report);
     }
