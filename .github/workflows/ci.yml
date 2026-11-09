@@ -27,10 +27,13 @@ jobs:
         with:
           node-version-file: .nvmrc
 
-      - name: Install system tools
+      # clippy, cargo test and the build compile Tauri's GTK/WebKit crates.
+      - name: Install system tools and Tauri dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --no-install-recommends -y lsof zsh
+          sudo apt-get install --no-install-recommends -y \
+            build-essential file libayatana-appindicator3-dev libssl-dev \
+            libwebkit2gtk-4.1-dev librsvg2-dev lsof pkg-config zsh
 
       - name: Install pnpm
         run: npm install --global pnpm@11.1.3
