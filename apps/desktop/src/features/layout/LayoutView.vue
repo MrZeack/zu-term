@@ -11,6 +11,7 @@ import type { ThemeName } from '../theme/theme.ts';
 import { computeGeometry, ratioAt, type Divider, type Rect } from './layout-geometry.ts';
 import { dropZoneAt, layoutEdgeAt, type DropZone, type EdgeZone } from './layout-dnd.ts';
 import { movePane, movePaneToEdge, type LayoutNode } from './layout-tree.ts';
+import type { GitDirectoryInfo } from '../git/git.ts';
 
 const props = defineProps<{
   home: string | undefined;
@@ -18,7 +19,7 @@ const props = defineProps<{
   theme: ThemeName;
   fontFamily?: string | undefined;
   fontSize?: number | undefined;
-  gitBranches?: Record<string, string> | undefined;
+  gitBranches?: Record<string, GitDirectoryInfo> | undefined;
 }>();
 const emit = defineEmits<{
   menu: [paneId: string, position: ContextMenuPosition];
@@ -192,7 +193,12 @@ const dropPreviewRect = computed<Rect | null>(() => {
         :title="paneTitle(store.panes[id] ?? {})"
         :command="store.panes[id]?.command"
         :path="shortPath(store.panes[id]?.cwd, props.home, PATH_MAX)"
-        :branch="props.gitBranches?.[store.panes[id]?.cwd ?? store.panes[id]?.startCwd ?? '']"
+        :branch="
+          props.gitBranches?.[store.panes[id]?.cwd ?? store.panes[id]?.startCwd ?? '']?.branch
+        "
+        :git-status="
+          props.gitBranches?.[store.panes[id]?.cwd ?? store.panes[id]?.startCwd ?? '']?.status
+        "
         :active="store.activeId === id"
         :renaming="store.renamingId === id"
         :draggable="true"

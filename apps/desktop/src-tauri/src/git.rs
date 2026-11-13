@@ -5,11 +5,21 @@ use std::path::Path;
 
 use serde::Serialize;
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct GitStatusSummary {
+    pub added: usize,
+    pub modified: usize,
+    pub deleted: usize,
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct GitBranchInfo {
     pub cwd: String,
     pub branch: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<GitStatusSummary>,
 }
 
 pub const MAX_CWDS: usize = 64;
@@ -70,6 +80,56 @@ pub fn detect_git_branch(cwd: &Path) -> Option<String> {
     None
 }
 
+/// Parses standard `git status --porcelain=v1` output lines into counts of
+/// added/untracked (+), modified/renamed (~) and deleted (-) files.
+pub fn parse_git_status(output: &str) -> GitStatusSummary {
+    let mut added = 0;
+    let mut modified = 0;
+    let mut deleted = 0;
+
+    for line in output.lines() {
+        let line = line.trim_end();
+        if line.len() < 3 {
+            continue;
+        }
+        let bytes = line.as_bytes();
+        let x = bytes[0] as char;
+        let y = bytes[1] as char;
+
+        if (x == '?' && y == '?') || (x == 'A' && y != 'D') {
+            added += 1;
+        } else if x == 'D' || y == 'D' {
+            deleted += 1;
+        } else if x == 'M' || y == 'M' || x == 'R' || y == 'R' || x == 'U' || y == 'U' {
+            modified += 1;
+        }
+    }
+
+    GitStatusSummary { added, modified, deleted }
+}
+
+/// Runs `git status --porcelain=v1` in the specified directory if git is available.
+/// Uses `GIT_OPTIONAL_LOCKS=0` to ensure background checks never conflict with user
+/// git commands or acquire background repository index locks.
+pub fn detect_git_status(cwd: &Path) -> Option<GitStatusSummary> {
+    let output = std::process::Command::new("git")
+        .arg("status")
+        .arg("--porcelain=v1")
+        .arg("--untracked-files=normal")
+        .current_dir(cwd)
+        .env("GIT_OPTIONAL_LOCKS", "0")
+        .env("LC_ALL", "C")
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let text = String::from_utf8_lossy(&output.stdout);
+    Some(parse_git_status(&text))
+}
+
 /// Scans the exact directories of the open splits: absolute, deduplicated
 /// and capped, so the UI can never trigger an unbounded filesystem walk.
 pub fn detect_git_branches_for_cwds(cwds: &[String]) -> Vec<GitBranchInfo> {
@@ -89,7 +149,8 @@ pub fn detect_git_branches_for_cwds(cwds: &[String]) -> Vec<GitBranchInfo> {
             continue;
         }
         if let Some(branch) = detect_git_branch(path) {
-            results.push(GitBranchInfo { cwd: trimmed.to_string(), branch });
+            let status = detect_git_status(path);
+            results.push(GitBranchInfo { cwd: trimmed.to_string(), branch, status });
         }
     }
     results
@@ -211,5 +272,32 @@ mod tests {
         let _ = fs::remove_dir_all(root1);
         let _ = fs::remove_dir_all(root2);
         let _ = fs::remove_dir_all(no_git);
+    }
+
+    #[test]
+    fn parses_git_status_porcelain_lines() {
+        let porcelain = "\
+?? untracked.txt
+A  staged_new.txt
+AM staged_new_modified.txt
+AD staged_new_deleted.txt
+ M modified_worktree.txt
+M  modified_index.txt
+MM modified_both.txt
+ D deleted_worktree.txt
+D  deleted_index.txt
+R  renamed.txt
+UU conflict.txt
+";
+        let summary = parse_git_status(porcelain);
+        assert_eq!(summary.added, 3); // untracked, staged_new, staged_new_modified
+        assert_eq!(summary.modified, 5); // modified_worktree, modified_index, modified_both, renamed, conflict
+        assert_eq!(summary.deleted, 3); // staged_new_deleted, deleted_worktree, deleted_index
+    }
+
+    #[test]
+    fn parses_empty_git_status_as_zero_changes() {
+        let summary = parse_git_status("");
+        assert_eq!(summary, GitStatusSummary::default());
     }
 }

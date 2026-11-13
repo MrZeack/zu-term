@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { nextTick, ref, useTemplateRef, watch } from 'vue';
+import { computed, nextTick, ref, useTemplateRef, watch } from 'vue';
 import { UI_DENSITY } from '../../core/ui-density.ts';
+import { formatGitStatus, formatGitStatusTooltip, type GitStatusSummary } from '../git/git.ts';
 
 const props = defineProps<{
   title: string;
   command?: string | undefined;
   path: string;
   branch?: string | undefined;
+  gitStatus?: GitStatusSummary | undefined;
   active: boolean;
   renaming: boolean;
   draggable?: boolean;
@@ -27,6 +29,13 @@ const densityStyle = {
   '--pane-title-font-size': `${UI_DENSITY.paneTitleFontSize}px`,
   '--pane-meta-font-size': `${UI_DENSITY.paneMetaFontSize}px`,
 };
+
+const gitStatusText = computed(() => formatGitStatus(props.gitStatus));
+const branchTooltip = computed(() => {
+  if (!props.branch) return '';
+  const diff = formatGitStatusTooltip(props.gitStatus);
+  return diff ? `Rama git: ${props.branch} (${diff})` : `Rama git: ${props.branch}`;
+});
 
 watch(
   () => props.renaming,
@@ -70,9 +79,10 @@ const commit = () => emit('rename', draft.value);
         {{ command }}
       </span>
       <h2 class="title" :title="title">{{ title }}</h2>
-      <span v-if="branch" class="branch-badge" :title="`Rama git: ${branch}`">
+      <span v-if="branch" class="branch-badge" :title="branchTooltip">
         <span class="branch-icon" aria-hidden="true">⎇</span>
-        {{ branch }}
+        <span class="branch-name">{{ branch }}</span>
+        <span v-if="gitStatusText" class="branch-status">{{ gitStatusText }}</span>
       </span>
     </div>
     <span class="path" :title="path">{{ path }}</span>
@@ -189,6 +199,20 @@ const commit = () => emit('rename', draft.value);
   font-size: 11px;
   line-height: 1;
   opacity: 0.85;
+}
+
+.branch-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branch-status {
+  padding-left: 2px;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  opacity: 0.9;
 }
 
 .command-dot {

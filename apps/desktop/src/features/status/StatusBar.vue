@@ -12,6 +12,7 @@ import {
   workspaceStatusLabel,
   type StatusPane,
 } from './status.ts';
+import { formatGitStatus, formatGitStatusTooltip } from '../git/git.ts';
 
 const props = defineProps<{
   workspaceName: string | undefined;
@@ -33,6 +34,12 @@ const densityStyle = {
 
 const runLabel = computed(() => formatRunProcessesSummary(props.runProcesses ?? []));
 const runTooltip = computed(() => formatRunProcessesTooltip(props.runProcesses ?? [], props.home));
+const statusBranchDiff = computed(() => formatGitStatus(props.pane?.gitStatus));
+const statusBranchTooltip = computed(() => {
+  if (!props.pane?.branch) return '';
+  const diff = formatGitStatusTooltip(props.pane.gitStatus);
+  return diff ? `Rama git: ${props.pane.branch} (${diff})` : `Rama git: ${props.pane.branch}`;
+});
 </script>
 
 <template>
@@ -48,13 +55,10 @@ const runTooltip = computed(() => formatRunProcessesTooltip(props.runProcesses ?
       <span v-if="agentStatusLabel(props.pane?.agent)" class="status-agent">
         {{ agentStatusLabel(props.pane?.agent) }}
       </span>
-      <span
-        v-if="props.pane?.branch"
-        class="status-branch"
-        :title="`Rama git: ${props.pane.branch}`"
-      >
+      <span v-if="props.pane?.branch" class="status-branch" :title="statusBranchTooltip">
         <span class="status-branch-icon" aria-hidden="true">⎇</span>
-        {{ props.pane.branch }}
+        <span class="status-branch-name">{{ props.pane.branch }}</span>
+        <span v-if="statusBranchDiff" class="status-branch-diff">{{ statusBranchDiff }}</span>
       </span>
       <span v-if="props.pane?.path" class="status-path">{{ props.pane.path }}</span>
       <span v-else class="status-empty">Sin terminal activa</span>
@@ -189,6 +193,20 @@ const runTooltip = computed(() => formatRunProcessesTooltip(props.runProcesses ?
 .status-branch-icon {
   font-size: 10px;
   opacity: 0.85;
+}
+
+.status-branch-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-branch-diff {
+  padding-left: 2px;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  opacity: 0.9;
 }
 
 .status-path {

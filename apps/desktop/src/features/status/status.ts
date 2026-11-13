@@ -1,3 +1,4 @@
+import type { GitStatusSummary } from '../git/git.ts';
 import type { AgentState } from '../workspace/agent.ts';
 
 export interface StatusPane {
@@ -7,6 +8,7 @@ export interface StatusPane {
   command?: string;
   agent?: AgentState;
   branch?: string;
+  gitStatus?: GitStatusSummary;
   cols?: number;
   rows?: number;
 }
