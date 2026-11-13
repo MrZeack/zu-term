@@ -6,6 +6,7 @@ export interface StatusPane {
   fullPath?: string;
   command?: string;
   agent?: AgentState;
+  branch?: string;
   cols?: number;
   rows?: number;
 }

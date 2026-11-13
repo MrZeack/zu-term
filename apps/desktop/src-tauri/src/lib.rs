@@ -2,6 +2,7 @@ use tauri::{Emitter, Manager};
 
 mod config;
 mod dock;
+mod git;
 mod host;
 mod links;
 mod pty;
@@ -45,6 +46,7 @@ pub fn run() {
             host::local_hostname,
             host::initial_cwd,
             links::open_link,
+            git::git_branches_detect,
             pty::commands::pty_spawn,
             pty::commands::pty_write,
             pty::commands::pty_resize,

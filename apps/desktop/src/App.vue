@@ -14,6 +14,8 @@ import { paneMenuItems } from './features/context-menu/menu-items.ts';
 import { showPaneMenu } from './features/context-menu/pane-menu.ts';
 import type { ContextMenuPosition } from './features/context-menu/position.ts';
 import ErrorArea from './features/errors/ErrorArea.vue';
+import { gitClient } from './features/git/git-client.ts';
+import { gitBranchMap, sameGitBranches } from './features/git/git.ts';
 import LayoutView from './features/layout/LayoutView.vue';
 import { createPaneActions } from './features/pane-actions/pane-actions.ts';
 import { paneTitle, shortPath } from './features/pane-header/pane-title.ts';
@@ -122,16 +124,20 @@ watch(
   },
   { immediate: true },
 );
+const gitBranches = ref<Record<string, string>>({});
 const statusPane = computed<StatusPane | undefined>(() => {
   const pane = store.panes[store.activeId];
   if (!pane) return undefined;
   const size = terminalSizes.value[store.activeId];
+  const paneCwd = pane.cwd ?? pane.startCwd;
+  const branch = paneCwd ? gitBranches.value[paneCwd] : undefined;
   return {
     title: paneTitle(pane),
     path: shortPath(pane.cwd, home.value, 160),
     ...(pane.cwd ? { fullPath: pane.cwd } : {}),
     ...(pane.command ? { command: pane.command } : {}),
     ...(pane.agent ? { agent: pane.agent } : {}),
+    ...(branch ? { branch } : {}),
     ...(size ? { cols: size.cols, rows: size.rows } : {}),
   };
 });
@@ -152,6 +158,20 @@ async function refreshRunProcesses() {
     }
   }
   if (!sameRunProcesses(runProcesses.value, next)) runProcesses.value = next;
+}
+
+async function refreshGitBranches() {
+  const cwds = activeCwds.value;
+  let next: Record<string, string> = {};
+  if (cwds.length > 0) {
+    try {
+      const list = await gitClient.detect(cwds);
+      next = gitBranchMap(list);
+    } catch {
+      next = {};
+    }
+  }
+  if (!sameGitBranches(gitBranches.value, next)) gitBranches.value = next;
 }
 
 let runProcessesTimer: ReturnType<typeof setInterval> | undefined;
@@ -189,6 +209,7 @@ let unlistenWorkspaces: UnlistenFn | undefined;
 
 function onWindowFocus() {
   void reloadWorkspaces();
+  void refreshGitBranches();
 }
 
 const actions = createPaneActions({
@@ -604,8 +625,12 @@ onMounted(async () => {
     window.addEventListener('error', onWindowError);
     window.addEventListener('unhandledrejection', onUnhandledRejection);
     void refreshRunProcesses();
+    void refreshGitBranches();
     // Workspace changes arrive through WORKSPACES_UPDATED_EVENT from the backend.
-    runProcessesTimer = setInterval(() => void refreshRunProcesses(), 3000);
+    runProcessesTimer = setInterval(() => {
+      void refreshRunProcesses();
+      void refreshGitBranches();
+    }, 3000);
   } catch (error) {
     report(error);
   }
@@ -621,6 +646,7 @@ function onUnhandledRejection(event: PromiseRejectionEvent) {
 
 watch(activeCwdsKey, () => {
   void refreshRunProcesses();
+  void refreshGitBranches();
 });
 
 onBeforeUnmount(() => {
@@ -732,6 +758,7 @@ onBeforeUnmount(() => {
       :theme="theme"
       :font-family="fontFamily"
       :font-size="fontSize"
+      :git-branches="gitBranches"
       @menu="openMenu"
       @size="onPaneSize"
       @exit="(paneId) => actions.run('close', paneId).catch(report)"

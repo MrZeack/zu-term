@@ -6,6 +6,7 @@ const props = defineProps<{
   title: string;
   command?: string | undefined;
   path: string;
+  branch?: string | undefined;
   active: boolean;
   renaming: boolean;
   draggable?: boolean;
@@ -69,6 +70,10 @@ const commit = () => emit('rename', draft.value);
         {{ command }}
       </span>
       <h2 class="title" :title="title">{{ title }}</h2>
+      <span v-if="branch" class="branch-badge" :title="`Rama git: ${branch}`">
+        <span class="branch-icon" aria-hidden="true">⎇</span>
+        {{ branch }}
+      </span>
     </div>
     <span class="path" :title="path">{{ path }}</span>
     <button
@@ -158,6 +163,32 @@ const commit = () => emit('rename', draft.value);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.branch-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  max-width: 42%;
+  padding: 2px 6px;
+  border: 1px solid var(--accent-border);
+  border-radius: 999px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  font-family: Menlo, monospace;
+  font-size: var(--pane-meta-font-size);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branch-icon {
+  font-size: 11px;
+  line-height: 1;
+  opacity: 0.85;
 }
 
 .command-dot {

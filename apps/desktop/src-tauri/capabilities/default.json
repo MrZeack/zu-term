@@ -15,6 +15,7 @@
     "allow-local-hostname",
     "allow-initial-cwd",
     "allow-open-link",
+    "allow-git-branches-detect",
     "allow-pty-spawn",
     "allow-pty-write",
     "allow-pty-resize",

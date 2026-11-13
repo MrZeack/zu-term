@@ -10,6 +10,7 @@ const COMMANDS: &[&str] = &[
     "workspace_lock_release_all",
     "local_hostname",
     "initial_cwd",
+    "git_branches_detect",
     "open_link",
     "pty_spawn",
     "pty_write",

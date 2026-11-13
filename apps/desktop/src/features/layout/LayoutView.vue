@@ -18,6 +18,7 @@ const props = defineProps<{
   theme: ThemeName;
   fontFamily?: string | undefined;
   fontSize?: number | undefined;
+  gitBranches?: Record<string, string> | undefined;
 }>();
 const emit = defineEmits<{
   menu: [paneId: string, position: ContextMenuPosition];
@@ -191,6 +192,7 @@ const dropPreviewRect = computed<Rect | null>(() => {
         :title="paneTitle(store.panes[id] ?? {})"
         :command="store.panes[id]?.command"
         :path="shortPath(store.panes[id]?.cwd, props.home, PATH_MAX)"
+        :branch="props.gitBranches?.[store.panes[id]?.cwd ?? store.panes[id]?.startCwd ?? '']"
         :active="store.activeId === id"
         :renaming="store.renamingId === id"
         :draggable="true"

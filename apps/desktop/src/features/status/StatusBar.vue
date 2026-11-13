@@ -48,6 +48,14 @@ const runTooltip = computed(() => formatRunProcessesTooltip(props.runProcesses ?
       <span v-if="agentStatusLabel(props.pane?.agent)" class="status-agent">
         {{ agentStatusLabel(props.pane?.agent) }}
       </span>
+      <span
+        v-if="props.pane?.branch"
+        class="status-branch"
+        :title="`Rama git: ${props.pane.branch}`"
+      >
+        <span class="status-branch-icon" aria-hidden="true">⎇</span>
+        {{ props.pane.branch }}
+      </span>
       <span v-if="props.pane?.path" class="status-path">{{ props.pane.path }}</span>
       <span v-else class="status-empty">Sin terminal activa</span>
     </div>
@@ -155,6 +163,7 @@ const runTooltip = computed(() => formatRunProcessesTooltip(props.runProcesses ?
 
 .status-command,
 .status-agent,
+.status-branch,
 .status-size {
   flex: 0 0 auto;
   color: var(--accent);
@@ -165,6 +174,21 @@ const runTooltip = computed(() => formatRunProcessesTooltip(props.runProcesses ?
 
 .status-agent {
   color: var(--accent-alt);
+}
+
+.status-branch {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-branch-icon {
+  font-size: 10px;
+  opacity: 0.85;
 }
 
 .status-path {
@@ -281,6 +305,7 @@ const runTooltip = computed(() => formatRunProcessesTooltip(props.runProcesses ?
 
   .status-kicker,
   .status-agent,
+  .status-branch,
   .status-divider {
     display: none;
   }
