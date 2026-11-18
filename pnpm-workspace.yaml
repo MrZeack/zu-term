@@ -14,3 +14,6 @@ auditConfig:
     # repo's own patterns, and it is not shipped. No 10.x fix and ESLint needs
     # ^10.2.6; remove once ESLint accepts minimatch 11.
     - GHSA-g3hv-75wg-m249
+    # picomatch <=4.0.7 (ReDoS): only typescript-eslint / tinyglobby uses it at
+    # dev time, and it is not shipped. No patched version exists yet.
+    - GHSA-fc5q-39xc-vjpf

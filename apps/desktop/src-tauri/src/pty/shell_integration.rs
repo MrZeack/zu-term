@@ -69,7 +69,7 @@ mod tests {
             .expect("spawn");
         let mut output = Vec::new();
         loop {
-            match rx.recv_timeout(Duration::from_secs(10)).expect("pty event") {
+            match rx.recv_timeout(Duration::from_secs(20)).expect("pty event") {
                 PtyEvent::Output(bytes) => output.extend(bytes),
                 PtyEvent::Exit(_) => return String::from_utf8_lossy(&output).into(),
             }
@@ -115,8 +115,12 @@ mod tests {
         fs::write(home.join(".zshrc"), "export USER_RC=rc\n").expect("zshrc");
 
         let mut command = CommandBuilder::new("zsh");
+        // `+m` disables job control (MONITOR) so zsh doesn't try to manipulate
+        // foreground process groups with tcsetpgrp(), which causes SIGTTIN/SIGTTOU
+        // hangs in automated headless PTY environments like Linux CI.
         command.args([
             "-i",
+            "+m",
             "-c",
             "print -r -- \"result=$USER_ENV:$USER_RC:${+functions[_zu_term_osc7]}:${ZDOTDIR-unset}\"",
         ]);
