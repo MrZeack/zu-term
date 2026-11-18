@@ -34,6 +34,7 @@ jobs:
           sudo apt-get install --no-install-recommends -y \
             build-essential file libayatana-appindicator3-dev libssl-dev \
             libwebkit2gtk-4.1-dev librsvg2-dev lsof pkg-config zsh
+          touch ~/.zshrc
 
       - name: Install pnpm
         run: npm install --global pnpm@12.15.0

@@ -19,6 +19,7 @@ else
   unset ZDOTDIR
 fi
 unset ZU_TERM_USER_ZDOTDIR
+zsh-newuser-install() { :; }
 [[ -r ${ZDOTDIR:-$HOME}/.zshenv ]] && source ${ZDOTDIR:-$HOME}/.zshenv
 [[ -o interactive && -r $_zu_term_integration ]] && source $_zu_term_integration
 unset _zu_term_integration
@@ -69,9 +70,13 @@ mod tests {
             .expect("spawn");
         let mut output = Vec::new();
         loop {
-            match rx.recv_timeout(Duration::from_secs(20)).expect("pty event") {
-                PtyEvent::Output(bytes) => output.extend(bytes),
-                PtyEvent::Exit(_) => return String::from_utf8_lossy(&output).into(),
+            match rx.recv_timeout(Duration::from_secs(20)) {
+                Ok(PtyEvent::Output(bytes)) => output.extend(bytes),
+                Ok(PtyEvent::Exit(_)) => return String::from_utf8_lossy(&output).into(),
+                Err(err) => panic!(
+                    "pty event timed out ({err:?}). Output received so far: {:?}",
+                    String::from_utf8_lossy(&output)
+                ),
             }
         }
     }
