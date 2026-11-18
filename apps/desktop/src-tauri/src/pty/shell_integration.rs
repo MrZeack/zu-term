@@ -19,6 +19,7 @@ else
   unset ZDOTDIR
 fi
 unset ZU_TERM_USER_ZDOTDIR
+export skip_global_compinit=1
 zsh-newuser-install() { :; }
 [[ -r ${ZDOTDIR:-$HOME}/.zshenv ]] && source ${ZDOTDIR:-$HOME}/.zshenv
 [[ -o interactive && -r $_zu_term_integration ]] && source $_zu_term_integration
@@ -131,6 +132,7 @@ mod tests {
         ]);
         command.env("HOME", &home);
         command.env_remove("ZDOTDIR");
+        command.env("skip_global_compinit", "1");
         apply(&mut command, "zsh", &root.join("config")).expect("apply");
 
         let output = run(command);
