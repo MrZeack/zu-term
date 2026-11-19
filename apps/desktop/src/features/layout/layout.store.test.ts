@@ -176,3 +176,12 @@ test('restores a layout and keeps future pane ids unique', () => {
   assert.notEqual(third, second);
   assert.equal(restored.panes[third]?.cwd, '/home/me/api');
 });
+
+test('getPane devuelve el estado del pane correspondiente o undefined', () => {
+  const store = createLayoutStore(nextId)();
+  store.init('/home/me');
+  const [first] = paneIds(store.root);
+  assert.ok(first);
+  assert.equal(store.getPane(first)?.cwd, '/home/me');
+  assert.equal(store.getPane('non-existent'), undefined);
+});

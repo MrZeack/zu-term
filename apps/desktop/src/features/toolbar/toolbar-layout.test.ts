@@ -118,3 +118,20 @@ test('incorpora selector de tipografía y controles de tamaño en la barra globa
   assert.match(fontMenuSource, /document\.addEventListener\('pointerdown'/);
   assert.match(fontMenuSource, /document\.removeEventListener\('pointerdown'/);
 });
+
+test('pide confirmación al cerrar un split con procesos o agentes activos', async () => {
+  const appSource = await readFile(new URL('../../App.vue', import.meta.url), 'utf8');
+  const layoutSource = await readFile(new URL('../layout/LayoutView.vue', import.meta.url), 'utf8');
+  const paneActionsSource = await readFile(
+    new URL('../pane-actions/pane-actions.ts', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(layoutSource, /@close="emit\('close', id\)"/);
+  assert.match(layoutSource, /close: \[paneId: string\]/);
+  assert.match(appSource, /confirmClose:/);
+  assert.match(appSource, /formatClosePaneConfirmation/);
+  assert.match(appSource, /@close="\(paneId\) => actions\.run\('close', paneId\)/);
+  assert.match(paneActionsSource, /paneHasActiveWork/);
+  assert.match(paneActionsSource, /confirmClose/);
+});

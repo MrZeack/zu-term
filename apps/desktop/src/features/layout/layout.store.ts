@@ -195,12 +195,17 @@ export function createLayoutStore(nextId: () => string) {
       return true;
     }
 
+    function getPane(id: string): PaneState | undefined {
+      return panes.value[id];
+    }
+
     return {
       root,
       panes,
       activeId,
       renamingId,
       init,
+      getPane,
       split,
       close,
       startRename,

@@ -25,6 +25,7 @@ const emit = defineEmits<{
   menu: [paneId: string, position: ContextMenuPosition];
   size: [paneId: string, cols: number, rows: number];
   exit: [paneId: string];
+  close: [paneId: string];
   paste: [paneId: string, text: string];
 }>();
 
@@ -205,7 +206,7 @@ const dropPreviewRect = computed<Rect | null>(() => {
         :dragging="draggedPaneId === id"
         @start-rename="store.startRename(id)"
         @rename="(name) => store.rename(id, name)"
-        @close="emit('exit', id)"
+        @close="emit('close', id)"
         @dragstart="startPaneDrag(id, $event)"
         @dragend="endPaneDrag"
       />

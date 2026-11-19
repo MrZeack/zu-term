@@ -17,7 +17,10 @@ import ErrorArea from './features/errors/ErrorArea.vue';
 import { gitClient } from './features/git/git-client.ts';
 import { gitBranchMap, sameGitBranches, type GitDirectoryInfo } from './features/git/git.ts';
 import LayoutView from './features/layout/LayoutView.vue';
-import { createPaneActions } from './features/pane-actions/pane-actions.ts';
+import {
+  createPaneActions,
+  formatClosePaneConfirmation,
+} from './features/pane-actions/pane-actions.ts';
 import { paneTitle, shortPath } from './features/pane-header/pane-title.ts';
 import {
   isCloseWindowShortcut,
@@ -224,8 +227,23 @@ const actions = createPaneActions({
       okLabel: 'Pegar',
       cancelLabel: 'Cancelar',
     }),
+  confirmClose: (target) => {
+    const { title, message } = formatClosePaneConfirmation(target);
+    return ask(message, {
+      title,
+      kind: 'warning',
+      okLabel: 'Cerrar split',
+      cancelLabel: 'Cancelar',
+    });
+  },
   closeWindow: () => appWindow.close(),
 });
+
+function onTerminalExit(paneId: string) {
+  if (!store.close(paneId)) {
+    void appWindow.close();
+  }
+}
 
 const report = (error: unknown, fallback?: string) => {
   errorStore.report(error, fallback);
@@ -762,7 +780,8 @@ onBeforeUnmount(() => {
       :git-branches="gitBranches"
       @menu="openMenu"
       @size="onPaneSize"
-      @exit="(paneId) => actions.run('close', paneId).catch(report)"
+      @close="(paneId) => actions.run('close', paneId).catch(report)"
+      @exit="(paneId) => onTerminalExit(paneId)"
       @paste="(paneId, text) => actions.pasteText(paneId, text).catch(report)"
     />
     <StatusBar

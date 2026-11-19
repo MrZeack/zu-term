@@ -3,15 +3,26 @@ import assert from 'node:assert/strict';
 import { createPinia, setActivePinia } from 'pinia';
 import { paneIds } from '../layout/layout-tree.ts';
 import { createLayoutStore } from '../layout/layout.store.ts';
-import { createPaneActions, type TerminalHandle } from './pane-actions.ts';
+import {
+  createPaneActions,
+  formatClosePaneConfirmation,
+  paneHasActiveWork,
+  type TerminalHandle,
+} from './pane-actions.ts';
 
 interface Options {
   selection?: string;
   clipboardText?: string;
   confirm?: boolean;
+  confirmClose?: boolean;
 }
 
-function setup({ selection = '', clipboardText = 'from clipboard', confirm = true }: Options = {}) {
+function setup({
+  selection = '',
+  clipboardText = 'from clipboard',
+  confirm = true,
+  confirmClose = true,
+}: Options = {}) {
   let counter = 0;
   const store = createLayoutStore(() => `id${++counter}`)();
   store.init('/home/me');
@@ -31,6 +42,12 @@ function setup({ selection = '', clipboardText = 'from clipboard', confirm = tru
     confirmPaste: async (lines) => {
       calls.push(`confirm:${lines}`);
       return confirm;
+    },
+    confirmClose: async (target) => {
+      calls.push(
+        `confirm-close:${target.id}:${target.agent ? target.agent.provider : `cmd:${target.command}`}`,
+      );
+      return confirmClose;
     },
     closeWindow: async () => void calls.push('close-window'),
   });
@@ -105,4 +122,55 @@ test('close removes the pane; closing the last one closes the window', async () 
   assert.deepEqual(calls, []);
   await actions.run('close', store.activeId);
   assert.deepEqual(calls, ['close-window']);
+});
+
+test('paneHasActiveWork detecta comandos en ejecución o agentes activos', () => {
+  assert.equal(paneHasActiveWork(undefined), false);
+  assert.equal(paneHasActiveWork({}), false);
+  assert.equal(paneHasActiveWork({ command: '' }), false);
+  assert.equal(paneHasActiveWork({ command: '   ' }), false);
+  assert.equal(paneHasActiveWork({ command: 'python' }), true);
+  assert.equal(paneHasActiveWork({ agent: { provider: 'claude' } }), true);
+  assert.equal(
+    paneHasActiveWork({ command: 'agy', agent: { provider: 'antigravity', sessionId: 's1' } }),
+    true,
+  );
+});
+
+test('formatClosePaneConfirmation genera mensaje descriptivo para agente o comando', () => {
+  assert.deepEqual(formatClosePaneConfirmation({ agent: { provider: 'claude' } }), {
+    title: 'Cerrar split',
+    message:
+      'Este split tiene una sesión activa del agente Claude. Si lo cierras, se interrumpirá su ejecución. ¿Deseas cerrarlo?',
+  });
+  assert.deepEqual(formatClosePaneConfirmation({ command: 'npm run dev' }), {
+    title: 'Cerrar split',
+    message:
+      'El comando “npm run dev” aún se está ejecutando en este split. Si lo cierras, el proceso se interrumpirá. ¿Deseas cerrarlo?',
+  });
+});
+
+test('cerrar split con agente activo pide confirmación y respeta la cancelación', async () => {
+  const { store, actions, calls, first } = setup({ confirmClose: false });
+  store.setAgent(first, { provider: 'claude', sessionId: 'c-1' });
+
+  await actions.run('close', first);
+  assert.equal(paneIds(store.root).length, 1);
+  assert.deepEqual(calls, [`confirm-close:${first}:claude`]);
+});
+
+test('cerrar split con agente activo se cierra cuando el usuario confirma', async () => {
+  const { store, actions, calls, first } = setup({ confirmClose: true });
+  store.setAgent(first, { provider: 'antigravity' });
+
+  await actions.run('close', first);
+  assert.deepEqual(calls, [`confirm-close:${first}:antigravity`, 'close-window']);
+});
+
+test('cerrar split con comando en ejecución pide confirmación y se cierra al confirmar', async () => {
+  const { store, actions, calls, first } = setup({ confirmClose: true });
+  store.setCommand(first, 'npm test');
+
+  await actions.run('close', first);
+  assert.deepEqual(calls, [`confirm-close:${first}:cmd:npm test`, 'close-window']);
 });
