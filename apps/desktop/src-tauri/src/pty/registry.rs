@@ -28,6 +28,7 @@ pub enum PtyEvent {
 
 struct Session {
     owner: String,
+    shell_pid: Option<u32>,
     master: Box<dyn MasterPty + Send>,
     input: SyncSender<Vec<u8>>,
     killer: Box<dyn ChildKiller + Send + Sync>,
@@ -93,12 +94,15 @@ impl PtyRegistry {
         drop(pair.slave);
         let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
         let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
+        let shell_pid = child.process_id();
         let killer = child.clone_killer();
 
         let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
         let input = spawn_input_writer(id, writer)?;
-        self.sessions()?
-            .insert(id, Session { owner: owner.to_owned(), master: pair.master, input, killer });
+        self.sessions()?.insert(
+            id,
+            Session { owner: owner.to_owned(), shell_pid, master: pair.master, input, killer },
+        );
 
         let (chunks_tx, chunks) = mpsc::sync_channel::<Vec<u8>>(MAX_QUEUED_READS);
         thread::Builder::new()
@@ -140,6 +144,29 @@ impl PtyRegistry {
         let sessions = self.sessions()?;
         let session = owned(&sessions, owner, id)?;
         session.master.resize(pty_size(cols, rows)?).map_err(|e| e.to_string())
+    }
+
+    /// Reports whether the PTY's foreground process group differs from the login
+    /// shell itself, which indicates a running child command even without shell
+    /// integration hooks.
+    pub fn has_foreground_process(&self, owner: &str, id: u32) -> Result<bool, String> {
+        let sessions = self.sessions()?;
+        let session = owned(&sessions, owner, id)?;
+        #[cfg(unix)]
+        {
+            let Some(shell_pid) = session.shell_pid else {
+                return Ok(false);
+            };
+            let Some(fg_pgid) = session.master.process_group_leader() else {
+                return Ok(false);
+            };
+            Ok(fg_pgid > 0 && fg_pgid as u32 != shell_pid)
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = session;
+            Ok(false)
+        }
     }
 
     pub fn kill(&self, owner: &str, id: u32) {
@@ -277,5 +304,46 @@ mod tests {
         assert!(registry.write(OWNER, id, "x").is_err());
         let (_, code) = collect(&rx);
         assert_ne!(code, Some(0), "the shell must be terminated");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn detects_whether_a_pty_has_a_foreground_child_process() {
+        let registry = PtyRegistry::default();
+        let mut cmd = CommandBuilder::new("zsh");
+        cmd.args(["-f", "-d", "-i"]);
+        cmd.env("PS1", "PROMPT_READY> ");
+        cmd.env("TERM", "dumb");
+        cmd.env("skip_global_compinit", "1");
+        let (tx, rx) = mpsc::channel();
+        let id = registry
+            .spawn(OWNER, cmd, 80, 24, move |event| {
+                let _ = tx.send(event);
+            })
+            .expect("spawn interactive shell");
+
+        let mut output = Vec::new();
+        while !String::from_utf8_lossy(&output).contains("PROMPT_READY>") {
+            match rx.recv_timeout(Duration::from_secs(5)).expect("shell prompt") {
+                PtyEvent::Output(bytes) => output.extend(bytes),
+                PtyEvent::Exit(_) => panic!("interactive shell exited early"),
+            }
+        }
+        assert_eq!(registry.has_foreground_process(OWNER, id), Ok(false));
+        assert!(registry.has_foreground_process("other-window", id).is_err());
+
+        registry.write(OWNER, id, "sleep 5\n").expect("start foreground command");
+
+        let deadline = Instant::now() + Duration::from_secs(3);
+        let mut detected = false;
+        while Instant::now() < deadline {
+            if registry.has_foreground_process(OWNER, id) == Ok(true) {
+                detected = true;
+                break;
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+        registry.kill(OWNER, id);
+        assert!(detected, "expected foreground child process group to be detected");
     }
 }

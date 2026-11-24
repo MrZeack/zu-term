@@ -7,12 +7,14 @@ export interface TerminalHandle {
   getSelection(): string;
   paste(text: string): void;
   clear(): void;
+  hasForegroundProcess?(): Promise<boolean>;
 }
 
 export interface PaneCloseTarget {
   id: string;
   command?: string | undefined;
   agent?: AgentState | undefined;
+  hasForegroundProcess?: boolean | undefined;
 }
 
 const AGENT_DISPLAY_NAMES: Record<AgentProvider, string> = {
@@ -24,21 +26,29 @@ const AGENT_DISPLAY_NAMES: Record<AgentProvider, string> = {
 };
 
 export function paneHasActiveWork(
-  pane: { command?: string | undefined; agent?: AgentState | undefined } | undefined,
+  pane:
+    | {
+        command?: string | undefined;
+        agent?: AgentState | undefined;
+        hasForegroundProcess?: boolean | undefined;
+      }
+    | undefined,
 ): boolean {
   if (!pane) return false;
-  return Boolean(pane.agent || pane.command?.trim());
+  return Boolean(pane.command?.trim() || pane.hasForegroundProcess);
 }
 
 export function formatClosePaneConfirmation(target: {
   command?: string | undefined;
   agent?: AgentState | undefined;
+  hasForegroundProcess?: boolean | undefined;
 }): {
   title: string;
   message: string;
 } {
   const title = 'Cerrar split';
-  if (target.agent) {
+  const hasActiveCommand = Boolean(target.command?.trim());
+  if (target.agent && (hasActiveCommand || target.hasForegroundProcess)) {
     const providerName = AGENT_DISPLAY_NAMES[target.agent.provider] ?? target.agent.provider;
     return {
       title,
@@ -115,12 +125,19 @@ export function createPaneActions({
         return;
       case 'close': {
         const pane = store.getPane ? store.getPane(paneId) : store.panes?.[paneId];
-        if (confirmClose && paneHasActiveWork(pane)) {
-          const confirmed = await confirmClose({
-            id: paneId,
-            command: pane?.command,
-            agent: pane?.agent,
-          });
+        const term = terminal(paneId);
+        const hasForegroundProcess =
+          !pane?.command?.trim() && term?.hasForegroundProcess
+            ? await term.hasForegroundProcess().catch(() => false)
+            : false;
+        const target: PaneCloseTarget = {
+          id: paneId,
+          command: pane?.command,
+          agent: pane?.agent,
+          hasForegroundProcess,
+        };
+        if (confirmClose && paneHasActiveWork(target)) {
+          const confirmed = await confirmClose(target);
           if (!confirmed) return;
         }
         if (!store.close(paneId)) await closeWindow();

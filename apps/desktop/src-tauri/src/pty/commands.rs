@@ -94,3 +94,12 @@ pub fn pty_resize(
 pub fn pty_kill(window: WebviewWindow, registry: State<'_, PtyRegistry>, id: u32) {
     registry.kill(window.label(), id);
 }
+
+#[tauri::command]
+pub fn pty_has_foreground_process(
+    window: WebviewWindow,
+    registry: State<'_, PtyRegistry>,
+    id: u32,
+) -> Result<bool, String> {
+    registry.has_foreground_process(window.label(), id)
+}

@@ -15,6 +15,7 @@ interface Options {
   clipboardText?: string;
   confirm?: boolean;
   confirmClose?: boolean;
+  hasForegroundProcess?: boolean;
 }
 
 function setup({
@@ -22,6 +23,7 @@ function setup({
   clipboardText = 'from clipboard',
   confirm = true,
   confirmClose = true,
+  hasForegroundProcess = false,
 }: Options = {}) {
   let counter = 0;
   const store = createLayoutStore(() => `id${++counter}`)();
@@ -31,6 +33,7 @@ function setup({
     getSelection: () => selection,
     paste: (text) => calls.push(`paste:${text}`),
     clear: () => calls.push('clear'),
+    hasForegroundProcess: async () => hasForegroundProcess,
   };
   const actions = createPaneActions({
     store,
@@ -44,9 +47,13 @@ function setup({
       return confirm;
     },
     confirmClose: async (target) => {
-      calls.push(
-        `confirm-close:${target.id}:${target.agent ? target.agent.provider : `cmd:${target.command}`}`,
-      );
+      const label =
+        target.agent && (target.command?.trim() || target.hasForegroundProcess)
+          ? target.agent.provider
+          : target.command?.trim()
+            ? `cmd:${target.command}`
+            : 'fg';
+      calls.push(`confirm-close:${target.id}:${label}`);
       return confirmClose;
     },
     closeWindow: async () => void calls.push('close-window'),
@@ -124,34 +131,64 @@ test('close removes the pane; closing the last one closes the window', async () 
   assert.deepEqual(calls, ['close-window']);
 });
 
-test('paneHasActiveWork detecta comandos en ejecución o agentes activos', () => {
+test('paneHasActiveWork detecta comandos en ejecución, agentes activos o procesos en primer plano', () => {
   assert.equal(paneHasActiveWork(undefined), false);
   assert.equal(paneHasActiveWork({}), false);
   assert.equal(paneHasActiveWork({ command: '' }), false);
   assert.equal(paneHasActiveWork({ command: '   ' }), false);
+  // Agente ya terminado (sin comando activo ni proceso en primer plano) no dispara falso positivo.
+  assert.equal(paneHasActiveWork({ agent: { provider: 'claude' } }), false);
   assert.equal(paneHasActiveWork({ command: 'python' }), true);
-  assert.equal(paneHasActiveWork({ agent: { provider: 'claude' } }), true);
+  assert.equal(paneHasActiveWork({ hasForegroundProcess: true }), true);
   assert.equal(
     paneHasActiveWork({ command: 'agy', agent: { provider: 'antigravity', sessionId: 's1' } }),
     true,
   );
+  assert.equal(
+    paneHasActiveWork({ agent: { provider: 'claude' }, hasForegroundProcess: true }),
+    true,
+  );
 });
 
-test('formatClosePaneConfirmation genera mensaje descriptivo para agente o comando', () => {
-  assert.deepEqual(formatClosePaneConfirmation({ agent: { provider: 'claude' } }), {
-    title: 'Cerrar split',
-    message:
-      'Este split tiene una sesión activa del agente Claude. Si lo cierras, se interrumpirá su ejecución. ¿Deseas cerrarlo?',
-  });
+test('formatClosePaneConfirmation genera mensaje descriptivo para agente, comando o proceso', () => {
+  assert.deepEqual(
+    formatClosePaneConfirmation({ command: 'claude', agent: { provider: 'claude' } }),
+    {
+      title: 'Cerrar split',
+      message:
+        'Este split tiene una sesión activa del agente Claude. Si lo cierras, se interrumpirá su ejecución. ¿Deseas cerrarlo?',
+    },
+  );
+  assert.deepEqual(
+    formatClosePaneConfirmation({ agent: { provider: 'codex' }, hasForegroundProcess: true }),
+    {
+      title: 'Cerrar split',
+      message:
+        'Este split tiene una sesión activa del agente Codex. Si lo cierras, se interrumpirá su ejecución. ¿Deseas cerrarlo?',
+    },
+  );
   assert.deepEqual(formatClosePaneConfirmation({ command: 'npm run dev' }), {
     title: 'Cerrar split',
     message:
       'El comando “npm run dev” aún se está ejecutando en este split. Si lo cierras, el proceso se interrumpirá. ¿Deseas cerrarlo?',
   });
+  assert.deepEqual(formatClosePaneConfirmation({ hasForegroundProcess: true }), {
+    title: 'Cerrar split',
+    message: 'Hay procesos en ejecución en este split. ¿Deseas cerrarlo de todos modos?',
+  });
+});
+
+test('cerrar split donde un agente ya terminó no pide confirmación', async () => {
+  const { store, actions, calls, first } = setup({ confirmClose: false });
+  store.setAgent(first, { provider: 'claude', sessionId: 'c-1' });
+  // Sin command activo y sin proceso en primer plano: el agente ya regresó al prompt.
+  await actions.run('close', first);
+  assert.deepEqual(calls, ['close-window']);
 });
 
 test('cerrar split con agente activo pide confirmación y respeta la cancelación', async () => {
   const { store, actions, calls, first } = setup({ confirmClose: false });
+  store.setCommand(first, 'claude');
   store.setAgent(first, { provider: 'claude', sessionId: 'c-1' });
 
   await actions.run('close', first);
@@ -161,6 +198,7 @@ test('cerrar split con agente activo pide confirmación y respeta la cancelació
 
 test('cerrar split con agente activo se cierra cuando el usuario confirma', async () => {
   const { store, actions, calls, first } = setup({ confirmClose: true });
+  store.setCommand(first, 'agy');
   store.setAgent(first, { provider: 'antigravity' });
 
   await actions.run('close', first);
@@ -173,4 +211,15 @@ test('cerrar split con comando en ejecución pide confirmación y se cierra al c
 
   await actions.run('close', first);
   assert.deepEqual(calls, [`confirm-close:${first}:cmd:npm test`, 'close-window']);
+});
+
+test('cerrar split con proceso en primer plano en PTY (sin OSC command) pide confirmación', async () => {
+  const { store, actions, calls, first } = setup({
+    confirmClose: false,
+    hasForegroundProcess: true,
+  });
+
+  await actions.run('close', first);
+  assert.equal(paneIds(store.root).length, 1);
+  assert.deepEqual(calls, [`confirm-close:${first}:fg`]);
 });

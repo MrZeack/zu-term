@@ -20,6 +20,7 @@
     "allow-pty-write",
     "allow-pty-resize",
     "allow-pty-kill",
+    "allow-pty-has-foreground-process",
     "allow-run-processes-detect",
     "core:path:allow-resolve-directory",
     "core:menu:allow-new",

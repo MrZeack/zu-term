@@ -16,6 +16,7 @@ const COMMANDS: &[&str] = &[
     "pty_write",
     "pty_resize",
     "pty_kill",
+    "pty_has_foreground_process",
     "run_processes_detect",
 ];
 

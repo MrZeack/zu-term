@@ -164,6 +164,8 @@ onMounted(async () => {
     getSelection: () => term.getSelection(),
     paste: (text) => term.paste(text),
     clear: () => term.clear(),
+    hasForegroundProcess: () =>
+      ptyId === undefined ? Promise.resolve(false) : ptyClient.hasForegroundProcess(ptyId),
   });
   links = attachTerminalLinks(term, host.value, {
     cwd: () => currentCwd,

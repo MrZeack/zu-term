@@ -26,6 +26,7 @@ export const ptyClient = {
   resize: (id: number, cols: number, rows: number) =>
     invoke<void>('pty_resize', { id, cols, rows }),
   kill: (id: number) => invoke<void>('pty_kill', { id }),
+  hasForegroundProcess: (id: number) => invoke<boolean>('pty_has_foreground_process', { id }),
 };
 
 export const localHostname = () => invoke<string>('local_hostname');

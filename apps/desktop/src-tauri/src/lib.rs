@@ -51,6 +51,7 @@ pub fn run() {
             pty::commands::pty_write,
             pty::commands::pty_resize,
             pty::commands::pty_kill,
+            pty::commands::pty_has_foreground_process,
             run_processes::run_processes_detect,
         ])
         .build(tauri::generate_context!())
