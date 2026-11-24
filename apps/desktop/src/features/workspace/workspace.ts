@@ -376,10 +376,11 @@ function sameLayoutNode(a: LayoutNode, b: LayoutNode): boolean {
   );
 }
 
-// Compares structural workspace state (layout, pane folders, names, agents and
-// active split) while ignoring volatile terminal titles such as agent spinners.
+// Whether `b` has unsaved changes against the saved `a`: layout, pane folders,
+// names and agents. Volatile terminal titles (agent spinners) and the active
+// split (saved, but not worth flagging) are ignored.
 export function sameWorkspaceSnapshot(a: WorkspaceSnapshot, b: WorkspaceSnapshot): boolean {
-  if (a.activeId !== b.activeId || !sameLayoutNode(a.root, b.root)) return false;
+  if (!sameLayoutNode(a.root, b.root)) return false;
   const aIds = Object.keys(a.panes);
   const bIds = Object.keys(b.panes);
   if (aIds.length !== bIds.length) return false;

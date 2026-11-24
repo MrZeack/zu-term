@@ -56,7 +56,7 @@ const panes: Record<string, PaneState> = {
   'pane-2': { id: 'pane-2', cwd: '/Users/me/project/api', agent: { provider: 'claude' } },
 };
 
-test('sameWorkspaceSnapshot detecta cambios estructurales e ignora títulos volátiles de terminal', () => {
+test('sameWorkspaceSnapshot detecta cambios estructurales e ignora títulos volátiles y el split activo', () => {
   const base = createWorkspaceSnapshot(root, panes, 'pane-1');
   const titleChanged = createWorkspaceSnapshot(
     root,
@@ -82,8 +82,9 @@ test('sameWorkspaceSnapshot detecta cambios estructurales e ignora títulos vol�
   const ratioChanged = createWorkspaceSnapshot({ ...root, ratio: 0.45 }, panes, 'pane-1');
   assert.equal(sameWorkspaceSnapshot(base, ratioChanged), false);
 
+  // Clicking another split is not an unsaved change (it is still saved).
   const activeChanged = createWorkspaceSnapshot(root, panes, 'pane-2');
-  assert.equal(sameWorkspaceSnapshot(base, activeChanged), false);
+  assert.equal(sameWorkspaceSnapshot(base, activeChanged), true);
 });
 
 test('crea un snapshot de workspace solo con agentes reanudables y sin comandos transitorios', () => {
