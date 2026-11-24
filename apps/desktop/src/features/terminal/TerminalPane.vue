@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { FitAddon } from '@xterm/addon-fit';
+import { SearchAddon } from '@xterm/addon-search';
 import type { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal } from '@xterm/xterm';
-import { onBeforeUnmount, onMounted, useTemplateRef, watch } from 'vue';
+import { onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from 'vue';
 import { useErrorStore } from '../../core/app-stores.ts';
 import { UI_DENSITY } from '../../core/ui-density.ts';
 import { linkClient } from '../links/link-client.ts';
@@ -13,6 +14,8 @@ import { ptyClient } from './pty-client.ts';
 import { clampFontSize, resolveFontFamily, waitForFontLoad } from './terminal-font.ts';
 import { coalesce, debounce } from './resize-scheduler.ts';
 import { terminals } from './terminal-registry.ts';
+import { runTerminalSearch } from './terminal-search.ts';
+import TerminalSearchBar from './TerminalSearchBar.vue';
 import { deferUntilNextFrame, webglBudget } from './webgl-startup.ts';
 import { THEME_CHANGE_EVENT, terminalTheme, type ThemeName } from '../theme/theme.ts';
 
@@ -48,13 +51,72 @@ const term = new Terminal({
   theme: terminalTheme(props.theme),
 });
 const fit = new FitAddon();
+const search = new SearchAddon();
 term.loadAddon(fit);
+term.loadAddon(search);
+
+const searchVisible = ref(false);
+const searchQuery = ref('');
+const searchCaseSensitive = ref(false);
+const searchRegex = ref(false);
+const searchResultIndex = ref(-1);
+const searchResultCount = ref(0);
+const searchInvalidRegex = ref(false);
+const searchFocusToken = ref(0);
+
+function executeSearch(direction: 'next' | 'previous', incremental = false) {
+  const outcome = runTerminalSearch(search, searchQuery.value, direction, {
+    caseSensitive: searchCaseSensitive.value,
+    regex: searchRegex.value,
+    incremental,
+  });
+  searchInvalidRegex.value = outcome === 'invalid-regex';
+  if (outcome === 'empty' || outcome === 'invalid-regex') {
+    searchResultIndex.value = -1;
+    searchResultCount.value = 0;
+  }
+}
+
+function openSearch() {
+  const selection = term.getSelection().trim();
+  if (selection && !selection.includes('\n')) {
+    searchQuery.value = selection;
+  }
+  searchVisible.value = true;
+  searchFocusToken.value += 1;
+  if (searchQuery.value) executeSearch('next', true);
+}
+
+function closeSearch() {
+  searchVisible.value = false;
+  searchInvalidRegex.value = false;
+  searchResultIndex.value = -1;
+  searchResultCount.value = 0;
+  search.clearDecorations();
+  term.focus();
+}
+
+function updateSearchQuery(value: string) {
+  searchQuery.value = value;
+  executeSearch('next', true);
+}
+
+function toggleSearchCaseSensitive() {
+  searchCaseSensitive.value = !searchCaseSensitive.value;
+  executeSearch('next');
+}
+
+function toggleSearchRegex() {
+  searchRegex.value = !searchRegex.value;
+  executeSearch('next');
+}
 
 let ptyId: number | undefined;
 let unmounted = false;
 // Folder that relative paths in the output are resolved against.
 let currentCwd = props.startCwd;
 let links: { dispose(): void } | undefined;
+let searchResultsDisposable: { dispose(): void } | undefined;
 let observer: ResizeObserver | undefined;
 let webgl: WebglAddon | undefined;
 let holdsWebglSlot = false;
@@ -164,10 +226,17 @@ onMounted(async () => {
     true,
   );
 
+  const searchResultsSub = search.onDidChangeResults(({ resultIndex, resultCount }) => {
+    searchResultIndex.value = resultIndex;
+    searchResultCount.value = resultCount;
+  });
+  searchResultsDisposable = searchResultsSub;
+
   terminals.register(props.paneId, {
     getSelection: () => term.getSelection(),
     paste: (text) => term.paste(text),
     clear: () => term.clear(),
+    openSearch,
     hasForegroundProcess: () =>
       ptyId === undefined ? Promise.resolve(false) : ptyClient.hasForegroundProcess(ptyId),
   });
@@ -255,6 +324,8 @@ onBeforeUnmount(() => {
   fitFrame.cancel();
   ptyResize.cancel();
   dropWebgl();
+  searchResultsDisposable?.dispose();
+  search.dispose();
   links?.dispose();
   window.removeEventListener(THEME_CHANGE_EVENT, updateTerminalTheme);
   terminals.unregister(props.paneId);
@@ -264,10 +335,37 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="host" class="terminal" />
+  <div class="terminal-wrap">
+    <TerminalSearchBar
+      :visible="searchVisible"
+      :query="searchQuery"
+      :case-sensitive="searchCaseSensitive"
+      :regex="searchRegex"
+      :result-index="searchResultIndex"
+      :result-count="searchResultCount"
+      :invalid-regex="searchInvalidRegex"
+      :focus-token="searchFocusToken"
+      @update:query="updateSearchQuery"
+      @toggle-case-sensitive="toggleSearchCaseSensitive"
+      @toggle-regex="toggleSearchRegex"
+      @next="executeSearch('next')"
+      @previous="executeSearch('previous')"
+      @close="closeSearch"
+    />
+    <div ref="host" class="terminal" />
+  </div>
 </template>
 
 <style scoped>
+.terminal-wrap {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .terminal {
   flex: 1;
   min-height: 0;

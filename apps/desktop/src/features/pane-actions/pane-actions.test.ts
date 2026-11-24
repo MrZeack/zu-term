@@ -33,6 +33,7 @@ function setup({
     getSelection: () => selection,
     paste: (text) => calls.push(`paste:${text}`),
     clear: () => calls.push('clear'),
+    openSearch: () => calls.push('open-search'),
     hasForegroundProcess: async () => hasForegroundProcess,
   };
   const actions = createPaneActions({
@@ -113,11 +114,12 @@ test('pasteText guards text that arrives from a native paste event', async () =>
   assert.deepEqual(calls, ['paste:echo ok', 'confirm:2']);
 });
 
-test('clear and rename act on the pane', async () => {
+test('clear, find and rename act on the pane', async () => {
   const { store, actions, calls, first } = setup();
   await actions.run('clear', first);
+  await actions.run('find', first);
   await actions.run('rename', first);
-  assert.deepEqual(calls, ['clear']);
+  assert.deepEqual(calls, ['clear', 'open-search']);
   assert.equal(store.renamingId, first);
 });
 

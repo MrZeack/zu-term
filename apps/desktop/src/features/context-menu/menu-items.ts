@@ -1,5 +1,5 @@
 export type PaneAction =
-  'split-right' | 'split-down' | 'copy' | 'paste' | 'rename' | 'clear' | 'close';
+  'split-right' | 'split-down' | 'copy' | 'paste' | 'find' | 'rename' | 'clear' | 'close';
 
 export type MenuEntry =
   { kind: 'action'; id: PaneAction; label: string; enabled: boolean } | { kind: 'separator' };
@@ -20,6 +20,7 @@ export function paneMenuItems({ hasSelection }: { hasSelection: boolean }): Menu
     action('copy', 'Copiar', hasSelection),
     action('paste', 'Pegar'),
     separator,
+    action('find', 'Buscar…'),
     action('rename', 'Renombrar…'),
     action('clear', 'Limpiar'),
     separator,

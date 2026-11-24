@@ -8,6 +8,7 @@ const MAC: Record<string, PaneAction> = {
   'shift+d': 'split-down',
   w: 'close',
   c: 'copy',
+  f: 'find',
   k: 'clear',
 };
 
@@ -18,6 +19,7 @@ const LINUX: Record<string, PaneAction> = {
   w: 'close',
   c: 'copy',
   v: 'paste',
+  f: 'find',
   k: 'clear',
 };
 

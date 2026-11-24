@@ -13,6 +13,7 @@ test('pane menu lists splits, clipboard and pane actions in order', () => {
     'copy',
     'paste',
     '---',
+    'find',
     'rename',
     'clear',
     '---',

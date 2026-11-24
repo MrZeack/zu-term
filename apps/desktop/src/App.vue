@@ -318,6 +318,9 @@ function onKeydown(event: KeyboardEvent) {
 
   const action = shortcutAction(event, isMac);
   if (!action) return;
+  if (event.target instanceof HTMLInputElement && (action === 'copy' || action === 'paste')) {
+    return;
+  }
   event.preventDefault();
   event.stopPropagation();
   actions.run(action, store.activeId).catch(report);

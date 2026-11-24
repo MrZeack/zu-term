@@ -7,6 +7,7 @@ export interface TerminalHandle {
   getSelection(): string;
   paste(text: string): void;
   clear(): void;
+  openSearch?(): void;
   hasForegroundProcess?(): Promise<boolean>;
 }
 
@@ -116,6 +117,9 @@ export function createPaneActions({
       }
       case 'paste':
         await pasteText(paneId, await clipboard.readText());
+        return;
+      case 'find':
+        terminal(paneId)?.openSearch?.();
         return;
       case 'rename':
         store.startRename(paneId);

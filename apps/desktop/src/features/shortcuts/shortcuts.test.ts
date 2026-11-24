@@ -24,6 +24,7 @@ test('macOS uses iTerm2-style shortcuts with CMD', () => {
   assert.equal(shortcutAction(key('w', { metaKey: true }), true), 'close');
   assert.equal(shortcutAction(key('c', { metaKey: true }), true), 'copy');
   assert.equal(shortcutAction(key('k', { metaKey: true }), true), 'clear');
+  assert.equal(shortcutAction(key('f', { metaKey: true }), true), 'find');
 });
 
 test('macOS leaves CMD+V to the native Edit menu', () => {
@@ -37,6 +38,7 @@ test('Linux uses Terminator-style CTRL+SHIFT shortcuts', () => {
   assert.equal(shortcutAction(key('W', mods), false), 'close');
   assert.equal(shortcutAction(key('C', mods), false), 'copy');
   assert.equal(shortcutAction(key('V', mods), false), 'paste');
+  assert.equal(shortcutAction(key('F', mods), false), 'find');
 });
 
 test('plain typing and shell control keys are not intercepted', () => {
