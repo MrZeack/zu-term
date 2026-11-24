@@ -114,7 +114,21 @@ pub fn parse_git_status(output: &str) -> GitStatusSummary {
     GitStatusSummary { added, modified, deleted }
 }
 
+// Kills the command and anything it started: they share its process group.
+fn kill_group(child: &mut std::process::Child) {
+    #[cfg(unix)]
+    if let Ok(pid) = libc::pid_t::try_from(child.id()) {
+        // SAFETY: `kill` only sends a signal; `-pid` names the group that
+        // `process_group(0)` created for this child.
+        unsafe { libc::kill(-pid, libc::SIGKILL) };
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
 fn run_command_with_timeout(mut command: Command, timeout: Duration) -> Option<String> {
+    #[cfg(unix)]
+    std::os::unix::process::CommandExt::process_group(&mut command, 0);
     let mut child = command.stdout(Stdio::piped()).stderr(Stdio::null()).spawn().ok()?;
     let stdout = child.stdout.take()?;
     // Drain stdout on a dedicated thread so a full pipe buffer never deadlocks
@@ -128,28 +142,20 @@ fn run_command_with_timeout(mut command: Command, timeout: Duration) -> Option<S
     let deadline = Instant::now() + timeout;
     let status = loop {
         match child.try_wait() {
-            Ok(Some(status)) => break Some(status),
-            Ok(None) => {
-                if Instant::now() >= deadline {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    break None;
-                }
-                thread::sleep(POLL_INTERVAL);
-            }
-            Err(_) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                break None;
+            Ok(Some(status)) => break status,
+            Ok(None) if Instant::now() < deadline => thread::sleep(POLL_INTERVAL),
+            // Timed out or unknown state: the reader is left to end on its
+            // own, since a surviving descendant could keep stdout open.
+            _ => {
+                kill_group(&mut child);
+                return None;
             }
         }
     };
-
-    let bytes = reader.join().ok()?;
-    let status = status?;
     if !status.success() {
         return None;
     }
+    let bytes = reader.join().ok()?;
     Some(String::from_utf8_lossy(&bytes).into_owned())
 }
 
@@ -346,8 +352,10 @@ UU conflict.txt
     #[cfg(unix)]
     #[test]
     fn command_with_timeout_returns_none_when_command_hangs() {
+        // `; :` keeps `sleep` a child (no exec) holding stdout open, as dash
+        // does on Linux: the timeout must not wait for it.
         let mut slow = std::process::Command::new("/bin/sh");
-        slow.args(["-c", "sleep 5"]);
+        slow.args(["-c", "sleep 5; :"]);
         let start = std::time::Instant::now();
         let output = run_command_with_timeout(slow, std::time::Duration::from_millis(80));
         assert!(output.is_none(), "slow command should time out");
