@@ -83,13 +83,13 @@ Un workspace solo puede estar abierto en una ventana: otra ventana o instancia n
 
 Al iniciar Zu Term no se abre ningún workspace automáticamente: aparece una terminal nueva y el workspace se restaura solo cuando lo seleccionas explícitamente en el menú `WORKSPACE`.
 
-La configuración se guarda en `~/.config/zu-term/config.json`; los historiales independientes de zsh se guardan en `~/.config/zu-term/history/`. En la primera ejecución, las claves actuales `zu-term.workspace.v1` y `zu-term.theme` de `localStorage` se importan al archivo. Las claves antiguas `zylo.*` no se migran.
+La configuración se guarda en `~/.config/zu-term/config.json`; los historiales independientes de zsh y bash se guardan en `~/.config/zu-term/history/` y los de fish en su carpeta de datos (`~/.local/share/fish/zu_term_*_history`). Al eliminar un workspace se borran sus historiales y, al arrancar, los que ningún workspace guardado usa y no cambian desde hace 7 días. En la primera ejecución, las claves actuales `zu-term.workspace.v1` y `zu-term.theme` de `localStorage` se importan al archivo. Las claves antiguas `zylo.*` no se migran.
 
 Al cerrar una ventana, Zu Term pregunta si debe guardar el workspace. `Cerrar y guardar workspace` guarda el workspace activo; `Cerrar sin guardar workspace` descarta los cambios desde el último guardado sin eliminar los workspaces guardados.
 
 Los agentes soportados son Codex, Claude Code, Kiro, Muse Code y Antigravity. Solo se restaura un agente ejecutado con un ID explícito y que sea el último comando del pane (cualquier otro comando posterior, como `make install`, lo descarta): el workspace guarda ese ID y al restaurar ejecuta su comando de reanudación. Un agente sin ID no se guarda y su pane se restaura como una shell vacía. Los comandos usados son `codex resume <ID>`, `claude --resume <ID>`, `kiro-cli chat --resume-id <ID>`, `muse resume <ID>` y `agy --conversation <ID>`.
 
-No se guardan procesos activos, comandos arbitrarios ni scrollback: la PTY se crea de nuevo y solo se relanza un agente de una lista permitida con un ID validado. El historial de comandos continúa siendo responsabilidad de zsh, pero cada pane recibe su propio `HISTFILE` bajo `~/.config/zu-term/history/`.
+No se guardan procesos activos, comandos arbitrarios ni scrollback: la PTY se crea de nuevo y solo se relanza un agente de una lista permitida con un ID validado. El historial de comandos continúa siendo responsabilidad de la shell, pero cada pane tiene el suyo.
 
 ### Integración de shell (zsh, bash y fish)
 

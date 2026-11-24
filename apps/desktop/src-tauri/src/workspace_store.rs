@@ -8,8 +8,8 @@ use serde_json::{Map, Value, json};
 use tauri::{AppHandle, Emitter, State, WebviewWindow, command};
 
 use crate::config::{
-    AppPaths, CONFIG_FILE_NAME, ensure_private_dir, private_file_options, prune_orphan_histories,
-    read_config_in, remove_history_files, write_config_in,
+    AppPaths, CONFIG_FILE_NAME, ensure_private_dir, fish_history_dir, private_file_options,
+    prune_orphan_histories, read_config_in, remove_history_files, write_config_in,
 };
 use crate::workspace_lock::{WorkspaceLocks, validate_workspace_id};
 
@@ -27,6 +27,8 @@ const FONT_SIZES: std::ops::RangeInclusive<u64> = 9..=28;
 /// window has open.
 pub struct ConfigStore {
     directory: PathBuf,
+    // fish keeps pane histories in its own data folder.
+    fish_history: Option<PathBuf>,
     guard: Mutex<()>,
 }
 
@@ -87,11 +89,13 @@ fn collect_catalog_history_ids(workspaces: &[Value]) -> BTreeSet<String> {
 
 impl ConfigStore {
     pub fn new(paths: &AppPaths) -> Self {
-        Self::in_directory(paths.config.clone())
+        let fish =
+            fish_history_dir(&paths.home, std::env::var_os("XDG_DATA_HOME").map(PathBuf::from));
+        Self { fish_history: Some(fish), ..Self::in_directory(paths.config.clone()) }
     }
 
     fn in_directory(directory: PathBuf) -> Self {
-        Self { directory, guard: Mutex::default() }
+        Self { directory, fish_history: None, guard: Mutex::default() }
     }
 
     /// Runs `task` holding both the in-process mutex and the OS file lock.
@@ -245,7 +249,7 @@ impl ConfigStore {
         if changed && !removed_histories.is_empty() {
             let unshared: BTreeSet<String> =
                 removed_histories.difference(&remaining_histories).cloned().collect();
-            remove_history_files(&self.directory, &unshared);
+            remove_history_files(&self.directory, self.fish_history.as_deref(), &unshared);
         }
         Ok(true)
     }
@@ -261,7 +265,12 @@ impl ConfigStore {
                     None => return Ok(0),
                 },
             };
-            Ok(prune_orphan_histories(&self.directory, &referenced, min_age))
+            Ok(prune_orphan_histories(
+                &self.directory,
+                self.fish_history.as_deref(),
+                &referenced,
+                min_age,
+            ))
         })
     }
 }

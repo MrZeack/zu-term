@@ -10,7 +10,9 @@ use tauri::{State, command};
 const CONFIG_DIR_NAME: &str = "zu-term";
 pub(crate) const CONFIG_FILE_NAME: &str = "config.json";
 const HISTORY_DIR_NAME: &str = "history";
-const HISTORY_SUFFIXES: &[&str] = &[".zsh_history", ".bash_history", ".fish_history"];
+const HISTORY_SUFFIXES: &[&str] = &[".zsh_history", ".bash_history"];
+const FISH_HISTORY_PREFIX: &str = "zu_term_";
+const FISH_HISTORY_SUFFIX: &str = "_history";
 const MAX_CONFIG_BYTES: usize = 4 * 1024 * 1024;
 const MAX_HISTORY_ID_BYTES: usize = 96;
 
@@ -87,57 +89,98 @@ pub(crate) fn history_file_for_shell(
     Ok(Some(directory.join(format!("{history_id}{suffix}"))))
 }
 
-pub(crate) fn remove_history_files(config: &Path, ids: &BTreeSet<String>) -> usize {
+/// Where fish keeps history files: `$XDG_DATA_HOME/fish`, or
+/// `~/.local/share/fish` when that is unset or not absolute.
+pub(crate) fn fish_history_dir(home: &Path, xdg_data_home: Option<PathBuf>) -> PathBuf {
+    xdg_data_home
+        .filter(|path| path.is_absolute())
+        .unwrap_or_else(|| home.join(".local").join("share"))
+        .join("fish")
+}
+
+/// The file fish uses for a pane (see `fish_history` in shell/zu-term.fish).
+fn fish_history_name(id: &str) -> String {
+    let session: String =
+        id.chars().map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '_' }).collect();
+    format!("{FISH_HISTORY_PREFIX}{session}{FISH_HISTORY_SUFFIX}")
+}
+
+fn remove_regular_file(path: &Path) -> bool {
+    fs::symlink_metadata(path).is_ok_and(|meta| meta.file_type().is_file())
+        && fs::remove_file(path).is_ok()
+}
+
+pub(crate) fn remove_history_files(
+    config: &Path,
+    fish: Option<&Path>,
+    ids: &BTreeSet<String>,
+) -> usize {
     let directory = config.join(HISTORY_DIR_NAME);
-    if !directory.is_dir() {
-        return 0;
-    }
     let mut removed = 0;
-    for id in ids {
-        if !valid_history_id(id) {
-            continue;
-        }
+    for id in ids.iter().filter(|id| valid_history_id(id)) {
         for suffix in HISTORY_SUFFIXES {
-            let path = directory.join(format!("{id}{suffix}"));
-            let is_real_file =
-                fs::symlink_metadata(&path).is_ok_and(|meta| meta.file_type().is_file());
-            if is_real_file && fs::remove_file(&path).is_ok() {
-                removed += 1;
-            }
+            removed += usize::from(remove_regular_file(&directory.join(format!("{id}{suffix}"))));
+        }
+        if let Some(fish) = fish {
+            removed += usize::from(remove_regular_file(&fish.join(fish_history_name(id))));
         }
     }
     removed
 }
 
+fn is_older_than(meta: &fs::Metadata, now: SystemTime, min_age: Duration) -> bool {
+    meta.modified().ok().and_then(|m| now.duration_since(m).ok()).unwrap_or_default() >= min_age
+}
+
 /// Removes history files not referenced by any saved workspace once they are
 /// older than `min_age`, keeping ephemeral splits in other open windows safe.
+/// In fish's folder it only touches Zu Term's `zu_term_*_history` files.
 pub(crate) fn prune_orphan_histories(
     config: &Path,
+    fish: Option<&Path>,
     referenced_ids: &BTreeSet<String>,
     min_age: Duration,
 ) -> usize {
-    let directory = config.join(HISTORY_DIR_NAME);
-    let Ok(entries) = fs::read_dir(&directory) else { return 0 };
     let now = SystemTime::now();
     let mut removed = 0;
 
-    for entry in entries.flatten() {
-        let path = entry.path();
-        let Ok(meta) = fs::symlink_metadata(&path) else { continue };
-        if !meta.file_type().is_file() {
-            continue;
+    if let Ok(entries) = fs::read_dir(config.join(HISTORY_DIR_NAME)) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Ok(meta) = fs::symlink_metadata(&path) else { continue };
+            let Some(name) = path.file_name().and_then(|n| n.to_str()) else { continue };
+            let Some(stem) = HISTORY_SUFFIXES.iter().find_map(|suffix| name.strip_suffix(suffix))
+            else {
+                continue;
+            };
+            if meta.file_type().is_file()
+                && valid_history_id(stem)
+                && !referenced_ids.contains(stem)
+                && is_older_than(&meta, now, min_age)
+                && fs::remove_file(&path).is_ok()
+            {
+                removed += 1;
+            }
         }
-        let Some(name) = path.file_name().and_then(|n| n.to_str()) else { continue };
-        let Some(stem) = HISTORY_SUFFIXES.iter().find_map(|suffix| name.strip_suffix(suffix))
-        else {
-            continue;
-        };
-        if !valid_history_id(stem) || referenced_ids.contains(stem) {
-            continue;
-        }
-        let age = meta.modified().ok().and_then(|m| now.duration_since(m).ok()).unwrap_or_default();
-        if age >= min_age && fs::remove_file(&path).is_ok() {
-            removed += 1;
+    }
+
+    let Some(fish) = fish else { return removed };
+    let referenced: BTreeSet<String> =
+        referenced_ids.iter().map(|id| fish_history_name(id)).collect();
+    if let Ok(entries) = fs::read_dir(fish) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Ok(meta) = fs::symlink_metadata(&path) else { continue };
+            let Some(name) = path.file_name().and_then(|n| n.to_str()) else { continue };
+            if meta.file_type().is_file()
+                && name.starts_with(FISH_HISTORY_PREFIX)
+                && name.ends_with(FISH_HISTORY_SUFFIX)
+                && !referenced.contains(name)
+                && is_older_than(&meta, now, min_age)
+                && fs::remove_file(&path).is_ok()
+            {
+                removed += 1;
+            }
         }
     }
     removed
@@ -289,6 +332,48 @@ mod tests {
         fs::remove_dir_all(directory).expect("cleanup");
     }
 
+    // fish keeps its own history files (`zu_term_<id>_history`, with `-`
+    // and `.` turned into `_`) in its data folder, next to the user's own.
+    #[test]
+    fn prunes_and_removes_fish_histories_of_zu_term_only() {
+        use std::collections::BTreeSet;
+        use std::time::Duration;
+
+        let directory = test_dir("prune-fish-history");
+        let fish = directory.join("fish");
+        fs::create_dir_all(&fish).expect("fish dir");
+        for name in [
+            "zu_term_pane_keep_history",
+            "zu_term_pane_drop_history",
+            "zu_term_pane_gone_history",
+            "fish_history",
+        ] {
+            fs::write(fish.join(name), "- cmd: ls\n").unwrap();
+        }
+
+        let keep = BTreeSet::from(["pane-keep".to_string()]);
+        assert_eq!(prune_orphan_histories(&directory, Some(&fish), &keep, Duration::ZERO), 2);
+        assert!(fish.join("zu_term_pane_keep_history").is_file());
+        assert!(!fish.join("zu_term_pane_drop_history").exists());
+        assert!(fish.join("fish_history").is_file(), "the user's own history stays");
+
+        let removed = BTreeSet::from(["pane-keep".to_string()]);
+        assert_eq!(remove_history_files(&directory, Some(&fish), &removed), 1);
+        assert!(!fish.join("zu_term_pane_keep_history").exists());
+        assert!(fish.join("fish_history").is_file());
+
+        fs::remove_dir_all(directory).expect("cleanup");
+    }
+
+    #[test]
+    fn fish_history_folder_follows_xdg_data_home() {
+        let home = Path::new("/home/me");
+        assert_eq!(fish_history_dir(home, None), home.join(".local/share/fish"));
+        assert_eq!(fish_history_dir(home, Some("/data".into())), PathBuf::from("/data/fish"));
+        // A relative XDG_DATA_HOME is invalid per the spec: fish ignores it.
+        assert_eq!(fish_history_dir(home, Some("data".into())), home.join(".local/share/fish"));
+    }
+
     #[test]
     fn prunes_only_unreferenced_history_files_past_grace_period() {
         use std::collections::BTreeSet;
@@ -303,11 +388,11 @@ mod tests {
 
         let keep = BTreeSet::from(["pane-keep".to_string()]);
         // With a long grace period, freshly created files are spared.
-        assert_eq!(prune_orphan_histories(&directory, &keep, Duration::from_secs(3600)), 0);
+        assert_eq!(prune_orphan_histories(&directory, None, &keep, Duration::from_secs(3600)), 0);
         assert!(history_dir.join("pane-drop.zsh_history").is_file());
 
         // With zero grace period, unreferenced history files are removed while referenced & other files stay.
-        assert_eq!(prune_orphan_histories(&directory, &keep, Duration::ZERO), 1);
+        assert_eq!(prune_orphan_histories(&directory, None, &keep, Duration::ZERO), 1);
         assert!(history_dir.join("pane-keep.zsh_history").is_file());
         assert!(!history_dir.join("pane-drop.zsh_history").exists());
         assert!(history_dir.join("notes.txt").is_file());
