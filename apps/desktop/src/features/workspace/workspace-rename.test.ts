@@ -43,3 +43,15 @@ test('App.vue conecta la acción de renombrar workspace con el diálogo y la per
   // Función o acción que persiste el nuevo nombre del workspace
   assert.match(appSource, /renameWorkspace/);
 });
+
+// WKWebView applies macOS "capitalize words automatically" and autocorrect to
+// text inputs: a name typed in lowercase must stay as typed.
+test('los campos de nombre no cambian mayúsculas ni corrigen lo escrito', async () => {
+  for (const path of ['./WorkspaceNameDialog.vue', '../pane-header/PaneHeader.vue']) {
+    const source = await readFile(new URL(path, import.meta.url), 'utf8');
+    const input = /<input[^>]*>/.exec(source)?.[0] ?? '';
+    assert.match(input, /autocapitalize="off"/, path);
+    assert.match(input, /autocorrect="off"/, path);
+    assert.match(input, /spellcheck="false"/, path);
+  }
+});

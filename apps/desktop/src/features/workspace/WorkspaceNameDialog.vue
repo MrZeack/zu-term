@@ -53,6 +53,9 @@ function submit() {
           v-model="draft"
           maxlength="80"
           autocomplete="off"
+          autocapitalize="off"
+          autocorrect="off"
+          spellcheck="false"
           autofocus
           required
         />
