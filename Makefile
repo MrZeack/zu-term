@@ -54,6 +54,7 @@ test: deps ## Unit tests: frontend, Rust, shell integration and operations
 	@pnpm run test
 	@cd $(TAURI_DIR) && cargo test --quiet
 	@zsh shell/osc7_spec.zsh
+	@bash shell/zu-term_bash_spec.bash
 	@bash scripts/node-selection.test.sh
 	@bash scripts/operations.test.sh
 

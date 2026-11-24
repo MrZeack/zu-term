@@ -6,27 +6,31 @@ use super::options::resolve_cwd;
 use super::registry::{PtyEvent, PtyRegistry};
 #[cfg(unix)]
 use super::shell_integration;
-use crate::config::{AppPaths, history_file};
+use crate::config::{AppPaths, history_file_for_shell, valid_history_id};
 
-/// The user's login shell, started in `cwd`, with the bundled zsh integration
-/// (shell/osc7.zsh). `ZU_TERM_TERMINAL` tells shells they run here.
+/// The user's login shell, started in `cwd`, with bundled integration for zsh,
+/// bash and fish. `ZU_TERM_TERMINAL` tells shells they run here.
 fn shell_command(
     paths: &AppPaths,
     cwd: Option<&str>,
     history_id: Option<&str>,
 ) -> Result<CommandBuilder, String> {
     let mut command = CommandBuilder::new_default_prog();
+    let shell = command.get_shell();
     #[cfg(unix)]
-    {
-        let shell = command.get_shell();
-        shell_integration::apply(&mut command, &shell, &paths.config)?;
-    }
+    shell_integration::apply(&mut command, &shell, &paths.config)?;
     command.cwd(resolve_cwd(cwd, &paths.home));
     command.env("TERM", "xterm-256color");
     command.env("COLORTERM", "truecolor");
     command.env("TERM_PROGRAM", "zu-term");
     command.env("ZU_TERM_TERMINAL", "1");
-    if let Some(history_path) = history_file(&paths.config, history_id)? {
+    if let Some(id) = history_id {
+        if !valid_history_id(id) {
+            return Err("invalid history id".into());
+        }
+        command.env("ZU_TERM_HISTORY_ID", id);
+    }
+    if let Some(history_path) = history_file_for_shell(&paths.config, history_id, &shell)? {
         let history_path = history_path.to_string_lossy().into_owned();
         command.env("HISTFILE", &history_path);
         command.env("ZU_TERM_HISTORY_FILE", history_path);

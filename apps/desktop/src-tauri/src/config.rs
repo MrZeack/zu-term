@@ -58,7 +58,7 @@ pub(crate) fn private_file_options() -> OpenOptions {
     options
 }
 
-fn valid_history_id(value: &str) -> bool {
+pub(crate) fn valid_history_id(value: &str) -> bool {
     let bytes = value.as_bytes();
     !bytes.is_empty()
         && bytes.len() <= MAX_HISTORY_ID_BYTES
@@ -68,17 +68,23 @@ fn valid_history_id(value: &str) -> bool {
         && bytes[0].is_ascii_alphanumeric()
 }
 
-pub(crate) fn history_file(
+pub(crate) fn history_file_for_shell(
     config: &Path,
     history_id: Option<&str>,
+    shell: &str,
 ) -> Result<Option<PathBuf>, String> {
     let Some(history_id) = history_id else { return Ok(None) };
     if !valid_history_id(history_id) {
         return Err("invalid history id".into());
     }
+    let suffix = match Path::new(shell).file_name().and_then(|s| s.to_str()) {
+        Some("bash") => ".bash_history",
+        Some("fish") => return Ok(None),
+        _ => ".zsh_history",
+    };
     let directory = config.join(HISTORY_DIR_NAME);
     ensure_private_dir(&directory)?;
-    Ok(Some(directory.join(format!("{history_id}.zsh_history"))))
+    Ok(Some(directory.join(format!("{history_id}{suffix}"))))
 }
 
 pub(crate) fn remove_history_files(config: &Path, ids: &BTreeSet<String>) -> usize {
@@ -260,6 +266,27 @@ mod tests {
         assert!(!valid_history_id("../outside"));
         assert!(!valid_history_id("history/id"));
         assert!(!valid_history_id(""));
+    }
+
+    #[test]
+    fn chooses_shell_specific_history_extension() {
+        let directory = test_dir("history-ext");
+        assert!(
+            history_file_for_shell(&directory, Some("pane-1"), "/bin/zsh")
+                .unwrap()
+                .unwrap()
+                .ends_with("pane-1.zsh_history")
+        );
+        assert!(
+            history_file_for_shell(&directory, Some("pane-1"), "/usr/bin/bash")
+                .unwrap()
+                .unwrap()
+                .ends_with("pane-1.bash_history")
+        );
+        assert!(
+            history_file_for_shell(&directory, Some("pane-1"), "/usr/bin/fish").unwrap().is_none()
+        );
+        fs::remove_dir_all(directory).expect("cleanup");
     }
 
     #[test]
