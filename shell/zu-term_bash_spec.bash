@@ -43,5 +43,30 @@ check "bash reports antigravity conversation IDs" "$(_zu_term_report_command 'ag
 check "bash clears the agent when command is not an agent" "$(_zu_term_report_command 'make install')" $'\e]1337;ZuTermCommand=make\e\\\e]1337;ZuTermAgent=\e\\'
 check "bash clears only command metadata at prompt" "$(_zu_term_clear_command)" $'\e]1337;ZuTermCommand=\e\\'
 
+# An existing DEBUG trap (starship, a user's own) keeps running with ours.
+chained="$(
+  prev_hits=0
+  trap 'prev_hits=$((prev_hits + 1)); note='\''it'\''"'\''"'\''s'\''' DEBUG
+  _zu_term_install_hooks
+  _ZU_TERM_AT_PROMPT=1
+  true
+  trap - DEBUG
+  printf '|%s|%s' "$(( prev_hits > 1 ))" "$note"
+)"
+check "bash chains an existing DEBUG trap" "$chained" $'\e]1337;ZuTermCommand=true\e\\\e]1337;ZuTermAgent=\e\\|1|it\'s'
+
+# With bash-preexec (atuin and others need it), register there instead.
+with_preexec="$(
+  bash_preexec_imported=defined
+  preexec_functions=(user_preexec)
+  precmd_functions=(user_precmd)
+  PROMPT_COMMAND='user_prompt'
+  _zu_term_install_hooks
+  _zu_term_install_hooks
+  printf '%s;' "${preexec_functions[*]}" "${precmd_functions[*]}" "$PROMPT_COMMAND" "$(trap -p DEBUG)"
+)"
+check "bash registers in bash-preexec once without its own trap" "$with_preexec" "user_preexec _zu_term_bp_preexec;user_precmd _zu_term_precmd;user_prompt;;"
+check "bash-preexec hands the full command line" "$(_zu_term_bp_preexec 'FOO=1 claude --resume s-1')" $'\e]1337;ZuTermCommand=claude\e\\\e]1337;ZuTermAgent=claude|s-1\e\\'
+
 rm -rf "$tmp_parent"
 exit "$failed"

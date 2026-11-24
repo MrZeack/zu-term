@@ -96,7 +96,7 @@ No se guardan procesos activos, comandos arbitrarios ni scrollback: la PTY se cr
 Se carga sola sin modificar tus dotfiles:
 
 - **`zsh`**: instala `shell/osc7.zsh` en `~/.config/zu-term/shell-integration/zsh/` y lo activa mediante `ZDOTDIR`, cargando tu `ZDOTDIR`, `.zshenv`, `.zprofile` y `.zshrc` como siempre.
-- **`bash`**: instala `shell/zu-term.bash` y un wrapper en `~/.config/zu-term/shell-integration/bash/` pasado vía `--rcfile`, cargando `/etc/profile` y tu perfil de login (o `~/.bashrc` si no tienes perfil), como una shell de login, antes de registrar `PROMPT_COMMAND` y el trap `DEBUG`.
+- **`bash`**: instala `shell/zu-term.bash` y un wrapper en `~/.config/zu-term/shell-integration/bash/` pasado vía `--rcfile`, cargando `/etc/profile` y tu perfil de login (o `~/.bashrc` si no tienes perfil), como una shell de login, antes de registrar sus hooks: en las listas de bash-preexec si está cargado o, si no, delante de `PROMPT_COMMAND` y del trap `DEBUG` que ya tengas, sin reemplazarlos.
 - **`fish`**: instala `shell/zu-term.fish` bajo `~/.config/zu-term/shell-integration/fish/fish/vendor_conf.d/` y lo expone vía `XDG_DATA_DIRS` (restaurando inmediatamente el `XDG_DATA_DIRS` original).
 
 Si `~/.zshrc` lanza otra shell mediante un wrapper (p. ej. `kiro-cli-term`), esa shell interna no hereda la integración. En ese caso, cárgala desde `~/.zshrc`:

@@ -138,17 +138,43 @@ _zu_term_precmd() {
   return "$exit_status"
 }
 
-if [[ $- == *i* ]]; then
-  _zu_term_configure_history
+# bash-preexec passes the whole command line, not just its first command.
+_zu_term_bp_preexec() {
+  _zu_term_report_command "$1"
+}
+
+# Hooks in without replacing what the user's startup files set up: inside
+# bash-preexec's lists when it is loaded (atuin and others rely on it);
+# otherwise in front of PROMPT_COMMAND and of any existing DEBUG trap.
+_zu_term_install_hooks() {
+  if [[ -n "${bash_preexec_imported:-}${__bp_imported:-}" ]]; then
+    [[ " ${preexec_functions[*]-} " == *" _zu_term_bp_preexec "* ]] ||
+      preexec_functions+=(_zu_term_bp_preexec)
+    [[ " ${precmd_functions[*]-} " == *" _zu_term_precmd "* ]] ||
+      precmd_functions+=(_zu_term_precmd)
+    return 0
+  fi
   case ";${PROMPT_COMMAND:-};" in
     *";_zu_term_precmd;"*) ;;
-    *)
-      if [[ -n "${PROMPT_COMMAND:-}" ]]; then
-        PROMPT_COMMAND="_zu_term_precmd;${PROMPT_COMMAND}"
-      else
-        PROMPT_COMMAND="_zu_term_precmd"
-      fi
-      ;;
+    *) PROMPT_COMMAND="_zu_term_precmd${PROMPT_COMMAND:+;$PROMPT_COMMAND}" ;;
   esac
-  trap '_zu_term_preexec' DEBUG
+  local previous
+  local -a words=()
+  previous="$(trap -p DEBUG)"
+  [[ "$previous" == *_zu_term_preexec* ]] && return 0
+  if [[ -n "$previous" ]]; then
+    # `trap -p` prints `trap -- '<command>' DEBUG`, already shell-quoted.
+    eval "words=(${previous})"
+    trap "_zu_term_preexec; ${words[2]}" DEBUG
+  else
+    trap '_zu_term_preexec' DEBUG
+  fi
+}
+# Without the trace attribute the function neither sees the current DEBUG
+# trap (bash 5) nor keeps the one it sets (bash 3.2).
+declare -ft _zu_term_install_hooks
+
+if [[ $- == *i* ]]; then
+  _zu_term_configure_history
+  _zu_term_install_hooks
 fi
