@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick, useTemplateRef, watch } from 'vue';
 import { APP_NAME } from '../../core/brand.ts';
+import { activeWorkHeading } from '../pane-actions/pane-actions.ts';
 
 const props = defineProps<{
   visible: boolean;
@@ -48,9 +49,9 @@ watch(
         Puedes guardar el workspace actual y volver a abrir sus splits, carpetas y agentes.
       </p>
       <div v-if="activeItems && activeItems.length > 0" class="close-dialog__active" role="status">
-        <strong>Se interrumpirán {{ activeItems.length }} procesos activos:</strong>
+        <strong>{{ activeWorkHeading(activeItems.length) }}</strong>
         <ul>
-          <li v-for="item in activeItems" :key="item">{{ item }}</li>
+          <li v-for="(item, index) in activeItems" :key="index">{{ item }}</li>
         </ul>
       </div>
       <div class="close-dialog__actions">

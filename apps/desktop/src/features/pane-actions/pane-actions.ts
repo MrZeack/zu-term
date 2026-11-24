@@ -101,6 +101,12 @@ export function listActivePaneWork(
   return items;
 }
 
+export function activeWorkHeading(count: number): string {
+  return count === 1
+    ? 'Se interrumpirá 1 proceso activo:'
+    : `Se interrumpirán ${count} procesos activos:`;
+}
+
 export interface PaneActionDeps {
   store: {
     split(id: string, direction: Direction): string;

@@ -1,9 +1,11 @@
 import { beforeEach, test } from 'node:test';
+import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import { createPinia, setActivePinia } from 'pinia';
 import { paneIds } from '../layout/layout-tree.ts';
 import { createLayoutStore } from '../layout/layout.store.ts';
 import {
+  activeWorkHeading,
   createPaneActions,
   formatClosePaneConfirmation,
   listActivePaneWork,
@@ -242,4 +244,17 @@ test('listActivePaneWork resume agentes, comandos y procesos en primer plano act
     'Tests · npm test',
     'Subshell · Proceso en ejecución',
   ]);
+});
+
+test('el aviso de cierre concuerda en número y admite procesos con el mismo texto', async () => {
+  assert.equal(activeWorkHeading(1), 'Se interrumpirá 1 proceso activo:');
+  assert.equal(activeWorkHeading(3), 'Se interrumpirán 3 procesos activos:');
+
+  const dialog = await readFile(
+    new URL('../workspace/CloseConfirmDialog.vue', import.meta.url),
+    'utf8',
+  );
+  assert.match(dialog, /activeWorkHeading\(activeItems\.length\)/);
+  // Two splits can both read "Terminal · npm run dev": the text is not a key.
+  assert.match(dialog, /v-for="\(item, index\) in activeItems" :key="index"/);
 });
