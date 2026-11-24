@@ -9,7 +9,13 @@ import TerminalPane from '../terminal/TerminalPane.vue';
 import { contextMenuPosition, type ContextMenuPosition } from '../context-menu/position.ts';
 import type { ThemeName } from '../theme/theme.ts';
 import { computeGeometry, ratioAt, type Divider, type Rect } from './layout-geometry.ts';
-import { dropZoneAt, layoutEdgeAt, type DropZone, type EdgeZone } from './layout-dnd.ts';
+import {
+  bindDividerDrag,
+  dropZoneAt,
+  layoutEdgeAt,
+  type DropZone,
+  type EdgeZone,
+} from './layout-dnd.ts';
 import { movePane, movePaneToEdge, type LayoutNode } from './layout-tree.ts';
 import type { GitDirectoryInfo } from '../git/git.ts';
 
@@ -54,20 +60,13 @@ function dividerStyle({ direction, position, area }: Divider) {
 
 function startDrag(divider: Divider, down: PointerEvent) {
   const target = down.currentTarget as HTMLElement;
-  target.setPointerCapture(down.pointerId);
-  const move = (event: PointerEvent) => {
+  bindDividerDrag(target, down.pointerId, (event) => {
     const box = container.value?.getBoundingClientRect();
     if (!box) return;
     const x = (event.clientX - box.left) / box.width;
     const y = (event.clientY - box.top) / box.height;
     store.resize(divider.splitId, ratioAt(divider.area, divider.direction, x, y));
-  };
-  const stop = () => {
-    target.removeEventListener('pointermove', move);
-    target.removeEventListener('pointerup', stop);
-  };
-  target.addEventListener('pointermove', move);
-  target.addEventListener('pointerup', stop);
+  });
 }
 
 function openMenu(paneId: string, event: MouseEvent) {

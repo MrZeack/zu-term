@@ -32,6 +32,17 @@ export function shortcutAction(event: KeyInput, isMac: boolean): PaneAction | nu
   return LINUX[key] ?? null;
 }
 
+export type FontZoomAction = 'increase' | 'decrease' | 'reset';
+
+export function fontZoomAction(event: KeyInput, isMac: boolean): FontZoomAction | null {
+  const mod = isMac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+  if (!mod || event.altKey) return null;
+  if (event.key === '=' || event.key === '+') return 'increase';
+  if (event.key === '-' || (isMac && event.key === '_')) return 'decrease';
+  if (event.key === '0') return 'reset';
+  return null;
+}
+
 export function isQuitShortcut(event: KeyInput, isMac: boolean): boolean {
   if (event.altKey && (event.key === 'F4' || event.key === 'f4')) {
     return true;
@@ -42,15 +53,16 @@ export function isQuitShortcut(event: KeyInput, isMac: boolean): boolean {
   if (isMac) {
     return event.metaKey && !event.ctrlKey;
   }
-  return event.ctrlKey && !event.metaKey;
+  // On Linux, bare Ctrl+Q is XON flow control in terminals; require Ctrl+Shift+Q.
+  return event.ctrlKey && event.shiftKey && !event.metaKey;
 }
 
 export function isCloseWindowShortcut(event: KeyInput, isMac: boolean): boolean {
-  if (event.altKey) return false;
   const key = event.key.toLowerCase();
   if (key !== 'w') return false;
   if (isMac) {
-    return event.metaKey && !event.ctrlKey && event.shiftKey;
+    return !event.altKey && event.metaKey && !event.ctrlKey && event.shiftKey;
   }
-  return event.ctrlKey && !event.metaKey && event.shiftKey;
+  // On Linux, Ctrl+Shift+W closes the active split; Ctrl+Alt+W closes the window.
+  return event.ctrlKey && event.altKey && !event.metaKey && !event.shiftKey;
 }

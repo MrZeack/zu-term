@@ -49,3 +49,27 @@ export function layoutEdgeAt(
   const [zone, distance] = distances.reduce((a, b) => (b[1] < a[1] ? b : a));
   return distance <= band ? zone : null;
 }
+
+export interface PointerDragTarget extends EventTarget {
+  setPointerCapture(pointerId: number): void;
+}
+
+export function bindDividerDrag(
+  target: PointerDragTarget,
+  pointerId: number,
+  onMove: (event: PointerEvent) => void,
+): () => void {
+  target.setPointerCapture(pointerId);
+  const move = (event: Event) => onMove(event as PointerEvent);
+  const stop = () => {
+    target.removeEventListener('pointermove', move);
+    target.removeEventListener('pointerup', stop);
+    target.removeEventListener('pointercancel', stop);
+    target.removeEventListener('lostpointercapture', stop);
+  };
+  target.addEventListener('pointermove', move);
+  target.addEventListener('pointerup', stop);
+  target.addEventListener('pointercancel', stop);
+  target.addEventListener('lostpointercapture', stop);
+  return stop;
+}

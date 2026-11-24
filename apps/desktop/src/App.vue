@@ -23,6 +23,7 @@ import {
 } from './features/pane-actions/pane-actions.ts';
 import { paneTitle, shortPath } from './features/pane-header/pane-title.ts';
 import {
+  fontZoomAction,
   isCloseWindowShortcut,
   isQuitShortcut,
   shortcutAction,
@@ -272,26 +273,14 @@ function onKeydown(event: KeyboardEvent) {
     return;
   }
 
-  const mod = isMac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
-  if (mod && !event.altKey) {
-    if (event.key === '=' || event.key === '+') {
-      event.preventDefault();
-      event.stopPropagation();
-      increaseFontSize();
-      return;
-    }
-    if (event.key === '-' || event.key === '_') {
-      event.preventDefault();
-      event.stopPropagation();
-      decreaseFontSize();
-      return;
-    }
-    if (event.key === '0') {
-      event.preventDefault();
-      event.stopPropagation();
-      resetFontSize();
-      return;
-    }
+  const zoom = fontZoomAction(event, isMac);
+  if (zoom) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (zoom === 'increase') increaseFontSize();
+    else if (zoom === 'decrease') decreaseFontSize();
+    else resetFontSize();
+    return;
   }
 
   const action = shortcutAction(event, isMac);

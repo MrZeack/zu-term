@@ -3,13 +3,14 @@ import { FitAddon } from '@xterm/addon-fit';
 import type { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal } from '@xterm/xterm';
 import { onBeforeUnmount, onMounted, useTemplateRef, watch } from 'vue';
+import { useErrorStore } from '../../core/app-stores.ts';
 import { UI_DENSITY } from '../../core/ui-density.ts';
 import { linkClient } from '../links/link-client.ts';
 import { attachTerminalLinks } from '../links/terminal-links.ts';
 import { buildAgentResumeCommand, type AgentState } from '../workspace/agent.ts';
 import { parseOsc7, parseZuTermAgent, parseZuTermCommand } from './osc.ts';
 import { ptyClient } from './pty-client.ts';
-import { clampFontSize, resolveFontFamily } from './terminal-font.ts';
+import { clampFontSize, resolveFontFamily, waitForFontLoad } from './terminal-font.ts';
 import { coalesce, debounce } from './resize-scheduler.ts';
 import { terminals } from './terminal-registry.ts';
 import { deferUntilNextFrame, webglBudget } from './webgl-startup.ts';
@@ -84,7 +85,10 @@ const ptyResize = debounce(
   },
 );
 
-const report = (error: unknown) => console.error(error);
+const errorStore = useErrorStore();
+const report = (error: unknown) => {
+  errorStore.report(error);
+};
 
 function updateTerminalTheme(event?: Event) {
   const theme = (event as CustomEvent<ThemeName> | undefined)?.detail;
@@ -219,11 +223,19 @@ watch(
   },
 );
 
+let fontLoadSequence = 0;
+
 watch(
   () => props.fontFamily,
   (nextFamily) => {
-    term.options.fontFamily = resolveFontFamily(nextFamily);
+    const family = resolveFontFamily(nextFamily);
+    const size = props.fontSize ? clampFontSize(props.fontSize) : UI_DENSITY.terminalFontSize;
+    term.options.fontFamily = family;
     fit.fit();
+    const seq = ++fontLoadSequence;
+    void waitForFontLoad(family, size).then(() => {
+      if (!unmounted && seq === fontLoadSequence) fit.fit();
+    });
   },
 );
 

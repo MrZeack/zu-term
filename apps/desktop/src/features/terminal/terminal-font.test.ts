@@ -10,6 +10,7 @@ import {
   MIN_TERMINAL_FONT_SIZE,
   resolveFontFamily,
   TERMINAL_FONTS,
+  waitForFontLoad,
 } from './terminal-font.ts';
 
 test('defines at least 6 libre terminal fonts plus system font', () => {
@@ -67,4 +68,23 @@ test('clampFontSize keeps size within min and max boundaries', () => {
   assert.equal(clampFontSize(14.7), 15);
   assert.equal(clampFontSize(Number.NaN), DEFAULT_TERMINAL_FONT_SIZE);
   assert.equal(clampFontSize(Number.POSITIVE_INFINITY), DEFAULT_TERMINAL_FONT_SIZE);
+});
+
+test('waitForFontLoad solicita la carga de la fuente y tolera errores o ausencia de FontFaceSet', async () => {
+  const loaded: string[] = [];
+  await waitForFontLoad("'Fira Code', monospace", 14, {
+    load: async (spec) => {
+      loaded.push(spec);
+      return [];
+    },
+  });
+  assert.deepEqual(loaded, ["14px 'Fira Code', monospace"]);
+
+  // No debe lanzar si el navegador/entorno no expone document.fonts o falla la carga.
+  await waitForFontLoad("'Fira Code', monospace", 14, undefined);
+  await waitForFontLoad("'Fira Code', monospace", 14, {
+    load: async () => {
+      throw new Error('font load failed');
+    },
+  });
 });

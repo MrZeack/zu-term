@@ -84,3 +84,20 @@ export function clampFontSize(size: number): number {
   const rounded = Math.round(size);
   return Math.max(MIN_TERMINAL_FONT_SIZE, Math.min(MAX_TERMINAL_FONT_SIZE, rounded));
 }
+
+export interface FontLoader {
+  load(font: string): Promise<unknown>;
+}
+
+export async function waitForFontLoad(
+  family: string,
+  size: number,
+  fonts: FontLoader | undefined = globalThis.document?.fonts,
+): Promise<void> {
+  if (!fonts?.load) return;
+  try {
+    await fonts.load(`${clampFontSize(size)}px ${family}`);
+  } catch {
+    // Missing or blocked font faces fall back to monospace without breaking fit.
+  }
+}
