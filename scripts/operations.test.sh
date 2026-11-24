@@ -77,6 +77,8 @@ grep -qE '^  release:$' .github/workflows/ci.yml || fail "CI no escucha releases
 grep -qF 'types: [published]' .github/workflows/ci.yml || fail "CI no limita releases a publicados"
 grep -qF "if: github.event_name == 'release' || (github.event_name == 'push' && github.ref_type == 'tag')" \
   .github/workflows/ci.yml || fail "el bundle se ejecuta fuera de tags y releases"
+grep -qE 'runs-on:\s*macos-' .github/workflows/ci.yml \
+  || fail "CI no valida compilación ni pruebas Rust específicas de macOS"
 grep -q 'aria-label="Cerrar split"' apps/desktop/src/features/pane-header/PaneHeader.vue \
   || fail "la cabecera no ofrece cerrar split"
 grep -q 'Cerrar y guardar workspace' apps/desktop/src/features/workspace/CloseConfirmDialog.vue \

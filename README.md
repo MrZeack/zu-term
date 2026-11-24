@@ -6,19 +6,19 @@ Terminal de escritorio para trabajar con agentes, apps y logs en una sola ventan
 
 ## Estructura
 
-| Ruta                     | Contenido                                                         |
-| ------------------------ | ----------------------------------------------------------------- |
-| `apps/desktop/src`       | UI en Vue 3 + xterm.js, por feature (`src/features/*`)            |
-| `apps/desktop/src-tauri` | Tauri 2 en Rust: PTY por split (`src/pty`), permisos y bundle     |
-| `shell/osc7.zsh`         | integración zsh incluida en la app: informa cwd, comando y agente |
-| `scripts/`               | arranque/parada en segundo plano y prueba de operación            |
-| `docs/`                  | [arquitectura](docs/ARCHITECTURE.md) y guías de buenas prácticas  |
+| Ruta                     | Contenido                                                            |
+| ------------------------ | -------------------------------------------------------------------- |
+| `apps/desktop/src`       | UI en Vue 3 + xterm.js, por feature (`src/features/*`)               |
+| `apps/desktop/src-tauri` | Tauri 2 en Rust: PTY por split (`src/pty`), permisos y bundle        |
+| `shell/`                 | integración zsh, bash y fish incluida: informa cwd, comando y agente |
+| `scripts/`               | arranque/parada en segundo plano y prueba de operación               |
+| `docs/`                  | [arquitectura](docs/ARCHITECTURE.md) y guías de buenas prácticas     |
 
 ## Requisitos
 
-- Node 24 (≥ 24.8; `node-24` o `node`) y pnpm 11; Rust con `rustup` (versión fijada en `rust-toolchain.toml`).
+- Node 24 (≥ 24.8; `node-24` o `node`) y pnpm 12; Rust con `rustup` (versión fijada en `rust-toolchain.toml`).
 - macOS: Xcode Command Line Tools. Linux: [dependencias de Tauri](https://v2.tauri.app/start/prerequisites/#linux) (`webkit2gtk-4.1`, etc.).
-- `zsh` como login shell para la integración de carpeta, comando y agente (abajo).
+- `zsh`, `bash` o `fish` como login shell para la integración automática de carpeta, comando y agente (abajo).
 
 ## Inicio rápido
 
@@ -44,17 +44,22 @@ make uninstall       # la desinstala
 
 ## Uso
 
-| Acción               | macOS         | Linux            | Ratón                                    |
-| -------------------- | ------------- | ---------------- | ---------------------------------------- |
-| Dividir a la derecha | `CMD+D`       | `CTRL+SHIFT+E`   | clic derecho                             |
-| Dividir hacia abajo  | `CMD+SHIFT+D` | `CTRL+SHIFT+O`   | clic derecho                             |
-| Copiar / pegar       | `CMD+C/V`     | `CTRL+SHIFT+C/V` | clic derecho                             |
-| Limpiar              | `CMD+K`       | `CTRL+SHIFT+K`   | clic derecho                             |
-| Cerrar split         | `CMD+W`       | `CTRL+SHIFT+W`   | clic derecho                             |
-| Renombrar split      | —             | —                | doble clic en la cabecera o clic derecho |
-| Redimensionar        | —             | —                | arrastrar el borde                       |
-| Reorganizar split    | —             | —                | arrastrar la cabecera a otro split       |
-| Abrir enlace/archivo | —             | —                | `Ctrl`+clic sobre una URL o ruta         |
+| Acción                    | macOS                  | Linux                                    | Ratón                                    |
+| ------------------------- | ---------------------- | ---------------------------------------- | ---------------------------------------- |
+| Dividir a la derecha      | `CMD+D`                | `CTRL+SHIFT+E`                           | clic derecho                             |
+| Dividir hacia abajo       | `CMD+SHIFT+D`          | `CTRL+SHIFT+O`                           | clic derecho                             |
+| Copiar / pegar            | `CMD+C/V`              | `CTRL+SHIFT+C/V`                         | clic derecho                             |
+| Buscar en scrollback      | `CMD+F`                | `CTRL+SHIFT+F`                           | clic derecho                             |
+| Limpiar                   | `CMD+K`                | `CTRL+SHIFT+K`                           | clic derecho                             |
+| Navegar entre splits      | `CMD+OPT+←↑↓→` / `⌘[]` | `CTRL+SHIFT+←↑↓→` / `CTRL+SHIFT+PgUpDn`  | clic en el split                         |
+| Maximizar/restaurar split | `CMD+SHIFT+ENTER`      | `CTRL+SHIFT+ENTER`                       | botón `⤢` en la cabecera                 |
+| Tamaño de fuente          | `CMD+` / `CMD-` / `⌘0` | `CTRL+` / `CTRL-` / `CTRL+0`             | controles de fuente en la barra superior |
+| Cerrar split              | `CMD+W`                | `CTRL+SHIFT+W`                           | clic derecho o `×` en la cabecera        |
+| Cerrar ventana / salir    | `CMD+SHIFT+W` / `⌘Q`   | `CTRL+ALT+W` / `CTRL+SHIFT+Q` / `ALT+F4` | botón cerrar de la ventana               |
+| Renombrar split           | —                      | —                                        | doble clic en la cabecera o clic derecho |
+| Redimensionar             | —                      | —                                        | arrastrar el borde                       |
+| Reorganizar split         | —                      | —                                        | arrastrar la cabecera a otro split       |
+| Abrir enlace/archivo      | —                      | —                                        | `Ctrl`+clic sobre una URL o ruta         |
 
 - `Ctrl`+clic (también en macOS, donde sustituye al menú contextual sobre el enlace) abre URLs `http(s)` en el navegador y rutas existentes —absolutas, `~/`, relativas a la carpeta del split, con `:línea:columna` opcional, o enlaces OSC 8— con su app predeterminada. Ejecutables, scripts, apps e instaladores solo se muestran en Finder (en Linux, se abre su carpeta).
 - Al arrastrar la cabecera, soltar en un borde de otro split lo divide en ese lado y soltar en su centro intercambia ambos; la franja junto al borde de la ventana lleva el split a todo ese borde.
@@ -62,8 +67,9 @@ make uninstall       # la desinstala
 - La barra superior incluye botones para dividir a la derecha o hacia abajo; ambos actúan sobre el split activo.
 - La barra inferior reserva espacio fuera de la consola y muestra el split activo, ruta, comando/agente, workspace, cantidad de splits y dimensiones reales de la PTY.
 - Arrastra la cabecera de un split al borde superior, inferior, izquierdo o derecho de otro para moverlo y cambiar entre orientación horizontal y vertical. Si el borde pertenece al límite de un grupo, se reorganiza el grupo completo; suelta en el centro para intercambiar posiciones. Puedes volver a una cuadrícula equilibrada arrastrando el pane al borde interno correspondiente.
-- Cada cabecera tiene un botón `×` para cerrar directamente ese split. Si es el último, Zu Term pide confirmación antes de cerrar la ventana.
-- La cabecera muestra el comando activo (`codex`, `claude`, etc.), el nombre asignado o el título que fija el programa y la carpeta actual.
+- Cada cabecera tiene botón `⤢` para maximizar/restaurar temporalmente el split y botón `×` para cerrarlo. Si hay un agente o proceso activo en el split (detectado por integración de shell o por grupo de procesos en primer plano de la PTY), pide confirmación antes de cerrarlo.
+- La cabecera muestra el comando activo (`codex`, `claude`, etc.), avisos de actividad cuando un split inactivo termina un comando o emite una alerta (`BEL`, OSC 9/99), la rama y resumen `git status` de su carpeta, el nombre asignado o el título del programa y la ruta actual.
+- El botón `WORKSPACE` muestra un punto indicador cuando hay cambios sin guardar respecto al último snapshot. Al cerrar la ventana, el diálogo también lista los agentes o procesos activos que se interrumpirán.
 - El botón `ACENTO` alterna rápidamente entre los temas Cian (`#00b7d5`) y Menta (`#00ca91`); la elección se conserva localmente.
 - En macOS, el menú contextual del icono de Zu Term en el Dock incluye `Nueva ventana`.
 
@@ -85,9 +91,13 @@ Los agentes soportados son Codex, Claude Code, Kiro, Muse Code y Antigravity. So
 
 No se guardan procesos activos, comandos arbitrarios ni scrollback: la PTY se crea de nuevo y solo se relanza un agente de una lista permitida con un ID validado. El historial de comandos continúa siendo responsabilidad de zsh, pero cada pane recibe su propio `HISTFILE` bajo `~/.config/zu-term/history/`.
 
-### Integración zsh
+### Integración de shell (zsh, bash y fish)
 
-Se carga sola: la app incluye `shell/osc7.zsh` y, cuando la login shell es zsh, lo instala en `~/.config/zu-term/shell-integration/zsh/` y lo activa mediante `ZDOTDIR`, sin tocar `~/.zshrc`. Tu `ZDOTDIR` y tus `.zshenv`, `.zprofile` y `.zshrc` se cargan como siempre.
+Se carga sola sin modificar tus dotfiles:
+
+- **`zsh`**: instala `shell/osc7.zsh` en `~/.config/zu-term/shell-integration/zsh/` y lo activa mediante `ZDOTDIR`, cargando tu `ZDOTDIR`, `.zshenv`, `.zprofile` y `.zshrc` como siempre.
+- **`bash`**: instala `shell/zu-term.bash` y un wrapper en `~/.config/zu-term/shell-integration/bash/` pasado vía `--rcfile`, cargando `/etc/profile`, tu perfil de login y `~/.bashrc` antes de registrar `PROMPT_COMMAND` y el trap `DEBUG`.
+- **`fish`**: instala `shell/zu-term.fish` bajo `~/.config/zu-term/shell-integration/fish/fish/vendor_conf.d/` y lo expone vía `XDG_DATA_DIRS` (restaurando inmediatamente el `XDG_DATA_DIRS` original).
 
 Si `~/.zshrc` lanza otra shell mediante un wrapper (p. ej. `kiro-cli-term`), esa shell interna no hereda la integración. En ese caso, cárgala desde `~/.zshrc`:
 

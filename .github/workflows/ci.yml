@@ -57,6 +57,34 @@ jobs:
       - name: Run all checks
         run: make check
 
+  macos-rust:
+    name: macOS Rust & shell checks
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install Rust toolchain
+        run: rustup toolchain install
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: apps/desktop/src-tauri
+
+      - name: Lint and test macOS backend (including AppKit dock integration)
+        run: |
+          cd apps/desktop/src-tauri
+          cargo fmt --check
+          cargo clippy --quiet --all-targets -- -D warnings
+          cargo test --quiet
+
+      - name: Run shell integration specs on macOS
+        run: |
+          zsh shell/osc7_spec.zsh
+          /bin/bash shell/zu-term_bash_spec.bash
+
   linux-bundle:
     name: Linux bundle
     if: github.event_name == 'release' || (github.event_name == 'push' && github.ref_type == 'tag')
