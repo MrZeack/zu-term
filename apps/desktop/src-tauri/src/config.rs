@@ -1,13 +1,16 @@
+use std::collections::BTreeSet;
 use std::fs::{self, File, OpenOptions};
 use std::io::{ErrorKind, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, SystemTime};
 
 use tauri::{State, command};
 
 const CONFIG_DIR_NAME: &str = "zu-term";
 pub(crate) const CONFIG_FILE_NAME: &str = "config.json";
 const HISTORY_DIR_NAME: &str = "history";
+const HISTORY_SUFFIXES: &[&str] = &[".zsh_history", ".bash_history", ".fish_history"];
 const MAX_CONFIG_BYTES: usize = 4 * 1024 * 1024;
 const MAX_HISTORY_ID_BYTES: usize = 96;
 
@@ -76,6 +79,62 @@ pub(crate) fn history_file(
     let directory = config.join(HISTORY_DIR_NAME);
     ensure_private_dir(&directory)?;
     Ok(Some(directory.join(format!("{history_id}.zsh_history"))))
+}
+
+pub(crate) fn remove_history_files(config: &Path, ids: &BTreeSet<String>) -> usize {
+    let directory = config.join(HISTORY_DIR_NAME);
+    if !directory.is_dir() {
+        return 0;
+    }
+    let mut removed = 0;
+    for id in ids {
+        if !valid_history_id(id) {
+            continue;
+        }
+        for suffix in HISTORY_SUFFIXES {
+            let path = directory.join(format!("{id}{suffix}"));
+            let is_real_file =
+                fs::symlink_metadata(&path).is_ok_and(|meta| meta.file_type().is_file());
+            if is_real_file && fs::remove_file(&path).is_ok() {
+                removed += 1;
+            }
+        }
+    }
+    removed
+}
+
+/// Removes history files not referenced by any saved workspace once they are
+/// older than `min_age`, keeping ephemeral splits in other open windows safe.
+pub(crate) fn prune_orphan_histories(
+    config: &Path,
+    referenced_ids: &BTreeSet<String>,
+    min_age: Duration,
+) -> usize {
+    let directory = config.join(HISTORY_DIR_NAME);
+    let Ok(entries) = fs::read_dir(&directory) else { return 0 };
+    let now = SystemTime::now();
+    let mut removed = 0;
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Ok(meta) = fs::symlink_metadata(&path) else { continue };
+        if !meta.file_type().is_file() {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else { continue };
+        let Some(stem) = HISTORY_SUFFIXES.iter().find_map(|suffix| name.strip_suffix(suffix))
+        else {
+            continue;
+        };
+        if !valid_history_id(stem) || referenced_ids.contains(stem) {
+            continue;
+        }
+        let age = meta.modified().ok().and_then(|m| now.duration_since(m).ok()).unwrap_or_default();
+        if age >= min_age && fs::remove_file(&path).is_ok() {
+            removed += 1;
+        }
+    }
+    removed
 }
 
 pub(crate) fn read_config_in(directory: &Path) -> Result<Option<String>, String> {
@@ -201,5 +260,31 @@ mod tests {
         assert!(!valid_history_id("../outside"));
         assert!(!valid_history_id("history/id"));
         assert!(!valid_history_id(""));
+    }
+
+    #[test]
+    fn prunes_only_unreferenced_history_files_past_grace_period() {
+        use std::collections::BTreeSet;
+        use std::time::Duration;
+
+        let directory = test_dir("prune-history");
+        let history_dir = directory.join(HISTORY_DIR_NAME);
+        fs::create_dir_all(&history_dir).expect("history dir");
+        fs::write(history_dir.join("pane-keep.zsh_history"), "echo keep\n").unwrap();
+        fs::write(history_dir.join("pane-drop.zsh_history"), "echo drop\n").unwrap();
+        fs::write(history_dir.join("notes.txt"), "not a history file\n").unwrap();
+
+        let keep = BTreeSet::from(["pane-keep".to_string()]);
+        // With a long grace period, freshly created files are spared.
+        assert_eq!(prune_orphan_histories(&directory, &keep, Duration::from_secs(3600)), 0);
+        assert!(history_dir.join("pane-drop.zsh_history").is_file());
+
+        // With zero grace period, unreferenced history files are removed while referenced & other files stay.
+        assert_eq!(prune_orphan_histories(&directory, &keep, Duration::ZERO), 1);
+        assert!(history_dir.join("pane-keep.zsh_history").is_file());
+        assert!(!history_dir.join("pane-drop.zsh_history").exists());
+        assert!(history_dir.join("notes.txt").is_file());
+
+        fs::remove_dir_all(directory).expect("cleanup");
     }
 }

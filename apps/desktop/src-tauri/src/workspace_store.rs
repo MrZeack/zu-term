@@ -1,13 +1,15 @@
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
+use std::time::Duration;
 
 use serde_json::{Map, Value, json};
 use tauri::{AppHandle, Emitter, State, WebviewWindow, command};
 
 use crate::config::{
-    AppPaths, CONFIG_FILE_NAME, ensure_private_dir, private_file_options, read_config_in,
-    write_config_in,
+    AppPaths, CONFIG_FILE_NAME, ensure_private_dir, private_file_options, prune_orphan_histories,
+    read_config_in, remove_history_files, write_config_in,
 };
 use crate::workspace_lock::{WorkspaceLocks, validate_workspace_id};
 
@@ -60,6 +62,27 @@ fn workspaces(config: &mut Config) -> Result<&mut Vec<Value>, String> {
 
 fn workspace_id(workspace: &Value) -> Option<&str> {
     workspace.get("id").and_then(Value::as_str)
+}
+
+fn collect_workspace_history_ids(workspace: &Value, into: &mut BTreeSet<String>) {
+    let Some(panes) =
+        workspace.get("snapshot").and_then(|s| s.get("panes")).and_then(Value::as_object)
+    else {
+        return;
+    };
+    for pane in panes.values() {
+        if let Some(history_id) = pane.get("historyId").and_then(Value::as_str) {
+            into.insert(history_id.to_owned());
+        }
+    }
+}
+
+fn collect_catalog_history_ids(workspaces: &[Value]) -> BTreeSet<String> {
+    let mut ids = BTreeSet::new();
+    for workspace in workspaces {
+        collect_workspace_history_ids(workspace, &mut ids);
+    }
+    ids
 }
 
 impl ConfigStore {
@@ -200,16 +223,46 @@ impl ConfigStore {
         if !already_held && !locks.acquire(id, owner)? {
             return Ok(false);
         }
+        let mut removed_histories = BTreeSet::new();
+        let mut remaining_histories = BTreeSet::new();
         let result = self.update(|config| {
             let workspaces = workspaces(config)?;
             let before = workspaces.len();
+            for item in workspaces.iter() {
+                if workspace_id(item) == Some(id) {
+                    collect_workspace_history_ids(item, &mut removed_histories);
+                } else {
+                    collect_workspace_history_ids(item, &mut remaining_histories);
+                }
+            }
             workspaces.retain(|item| workspace_id(item) != Some(id));
             Ok(workspaces.len() != before)
         });
         if !already_held {
             locks.release(id, owner)?;
         }
-        result.map(|_| true)
+        let changed = result?;
+        if changed && !removed_histories.is_empty() {
+            let unshared: BTreeSet<String> =
+                removed_histories.difference(&remaining_histories).cloned().collect();
+            remove_history_files(&self.directory, &unshared);
+        }
+        Ok(true)
+    }
+
+    pub fn prune_orphan_histories(&self, min_age: Duration) -> Result<usize, String> {
+        self.locked(|| {
+            let referenced = match read_config_in(&self.directory)? {
+                None => BTreeSet::new(),
+                Some(raw) => match parse_config(&raw) {
+                    Some(mut config) => workspaces(&mut config)
+                        .map(|ws| collect_catalog_history_ids(ws))
+                        .unwrap_or_default(),
+                    None => return Ok(0),
+                },
+            };
+            Ok(prune_orphan_histories(&self.directory, &referenced, min_age))
+        })
     }
 }
 
@@ -416,5 +469,44 @@ mod tests {
         }
         f.locks.acquire("ws-extra", "main").unwrap();
         assert!(f.store.save_workspace(&f.locks, "main", workspace("ws-extra", "n")).is_err());
+    }
+
+    #[test]
+    fn deleting_a_workspace_removes_only_its_unshared_history_files() {
+        let f = Fixture::new("delete-history");
+        let history_dir = f.root.join("config").join("history");
+        fs::create_dir_all(&history_dir).unwrap();
+        fs::write(history_dir.join("hist-only-1.zsh_history"), "ls\n").unwrap();
+        fs::write(history_dir.join("hist-shared.zsh_history"), "pwd\n").unwrap();
+
+        let ws1 = json!({
+            "id": "ws-1",
+            "name": "Uno",
+            "updatedAt": 1,
+            "snapshot": {
+                "panes": {
+                    "p1": { "id": "p1", "historyId": "hist-only-1" },
+                    "p2": { "id": "p2", "historyId": "hist-shared" }
+                }
+            }
+        });
+        let ws2 = json!({
+            "id": "ws-2",
+            "name": "Dos",
+            "updatedAt": 1,
+            "snapshot": {
+                "panes": {
+                    "p1": { "id": "p1", "historyId": "hist-shared" }
+                }
+            }
+        });
+        f.locks.acquire("ws-1", "main").unwrap();
+        f.locks.acquire("ws-2", "main").unwrap();
+        f.store.save_workspace(&f.locks, "main", ws1).unwrap();
+        f.store.save_workspace(&f.locks, "main", ws2).unwrap();
+
+        assert_eq!(f.store.delete_workspace(&f.locks, "main", "ws-1"), Ok(true));
+        assert!(!history_dir.join("hist-only-1.zsh_history").exists());
+        assert!(history_dir.join("hist-shared.zsh_history").is_file());
     }
 }

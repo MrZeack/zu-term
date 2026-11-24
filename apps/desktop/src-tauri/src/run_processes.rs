@@ -110,10 +110,12 @@ pub fn detect_run_processes_for_cwds(cwds: &[String]) -> Vec<RunProcessInfo> {
     directories.iter().flat_map(|directory| scan_run_directory(directory)).collect()
 }
 
-// Async so the filesystem scan runs off the main thread.
+// Offload blocking filesystem checks onto Tokio's blocking pool.
 #[tauri::command]
 pub async fn run_processes_detect(cwds: Vec<String>) -> Vec<RunProcessInfo> {
-    detect_run_processes_for_cwds(&cwds)
+    tauri::async_runtime::spawn_blocking(move || detect_run_processes_for_cwds(&cwds))
+        .await
+        .unwrap_or_default()
 }
 
 #[cfg(test)]

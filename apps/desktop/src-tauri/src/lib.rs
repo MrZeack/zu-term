@@ -31,6 +31,12 @@ pub fn run() {
             app.manage(workspace_lock::WorkspaceLocks::new(&paths));
             app.manage(workspace_store::ConfigStore::new(&paths));
             app.manage(paths);
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                let _ = handle
+                    .state::<workspace_store::ConfigStore>()
+                    .prune_orphan_histories(std::time::Duration::from_secs(7 * 24 * 3600));
+            });
             dock::install(app.handle());
             Ok(())
         })

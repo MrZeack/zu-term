@@ -22,6 +22,7 @@ import {
   formatClosePaneConfirmation,
 } from './features/pane-actions/pane-actions.ts';
 import { paneTitle, shortPath } from './features/pane-header/pane-title.ts';
+import { createVisibilityPoller } from './features/polling/window-polling.ts';
 import {
   fontZoomAction,
   isCloseWindowShortcut,
@@ -179,7 +180,27 @@ async function refreshGitBranches() {
   if (!sameGitBranches(gitBranches.value, next)) gitBranches.value = next;
 }
 
-let runProcessesTimer: ReturnType<typeof setInterval> | undefined;
+const statusPoller = createVisibilityPoller({
+  intervalMs: 3000,
+  isHidden: () => document.hidden,
+  tick: async () => {
+    await Promise.all([refreshRunProcesses(), refreshGitBranches()]);
+  },
+});
+
+function onVisibilityChange() {
+  statusPoller.onVisibilityChange();
+}
+
+watch(
+  () => Object.keys(store.panes),
+  (liveIds) => {
+    const live = new Set(liveIds);
+    for (const id of Object.keys(terminalSizes.value)) {
+      if (!live.has(id)) delete terminalSizes.value[id];
+    }
+  },
+);
 const workspaceDialogInitialName = computed(() => {
   if (workspaceDialogMode.value === 'rename' && renamingWorkspaceId.value) {
     return findWorkspace(workspaceCatalog.value, renamingWorkspaceId.value)?.name ?? '';
@@ -214,7 +235,7 @@ let unlistenWorkspaces: UnlistenFn | undefined;
 
 function onWindowFocus() {
   void reloadWorkspaces();
-  void refreshGitBranches();
+  void statusPoller.trigger();
 }
 
 const actions = createPaneActions({
@@ -632,13 +653,9 @@ onMounted(async () => {
     window.addEventListener('focus', onWindowFocus);
     window.addEventListener('error', onWindowError);
     window.addEventListener('unhandledrejection', onUnhandledRejection);
-    void refreshRunProcesses();
-    void refreshGitBranches();
+    document.addEventListener('visibilitychange', onVisibilityChange);
     // Workspace changes arrive through WORKSPACES_UPDATED_EVENT from the backend.
-    runProcessesTimer = setInterval(() => {
-      void refreshRunProcesses();
-      void refreshGitBranches();
-    }, 3000);
+    statusPoller.start();
   } catch (error) {
     report(error);
   }
@@ -653,14 +670,12 @@ function onUnhandledRejection(event: PromiseRejectionEvent) {
 }
 
 watch(activeCwdsKey, () => {
-  void refreshRunProcesses();
-  void refreshGitBranches();
+  void statusPoller.trigger();
 });
 
 onBeforeUnmount(() => {
-  if (runProcessesTimer) {
-    clearInterval(runProcessesTimer);
-  }
+  statusPoller.stop();
+  document.removeEventListener('visibilitychange', onVisibilityChange);
   window.removeEventListener('keydown', onKeydown, true);
   window.removeEventListener('focus', onWindowFocus);
   window.removeEventListener('error', onWindowError);

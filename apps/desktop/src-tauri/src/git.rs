@@ -2,6 +2,9 @@ use std::collections::BTreeSet;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
+use std::process::{Command, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
 
@@ -27,6 +30,9 @@ const MAX_PATH_BYTES: usize = 4096;
 const MAX_GIT_FILE_BYTES: u64 = 1024;
 const MAX_HEAD_BYTES: u64 = 512;
 const MAX_BRANCH_NAME_BYTES: usize = 120;
+const MAX_GIT_STATUS_BYTES: u64 = 512 * 1024;
+const GIT_STATUS_TIMEOUT: Duration = Duration::from_secs(2);
+const POLL_INTERVAL: Duration = Duration::from_millis(15);
 
 fn read_text_file(path: &Path, limit: u64) -> Option<String> {
     let file = File::open(path).ok()?;
@@ -108,25 +114,59 @@ pub fn parse_git_status(output: &str) -> GitStatusSummary {
     GitStatusSummary { added, modified, deleted }
 }
 
+fn run_command_with_timeout(mut command: Command, timeout: Duration) -> Option<String> {
+    let mut child = command.stdout(Stdio::piped()).stderr(Stdio::null()).spawn().ok()?;
+    let stdout = child.stdout.take()?;
+    // Drain stdout on a dedicated thread so a full pipe buffer never deadlocks
+    // while waiting for exit, capped so huge repos cannot grow memory unbounded.
+    let reader = thread::spawn(move || {
+        let mut buf = Vec::new();
+        let _ = stdout.take(MAX_GIT_STATUS_BYTES).read_to_end(&mut buf);
+        buf
+    });
+
+    let deadline = Instant::now() + timeout;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break Some(status),
+            Ok(None) => {
+                if Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    break None;
+                }
+                thread::sleep(POLL_INTERVAL);
+            }
+            Err(_) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                break None;
+            }
+        }
+    };
+
+    let bytes = reader.join().ok()?;
+    let status = status?;
+    if !status.success() {
+        return None;
+    }
+    Some(String::from_utf8_lossy(&bytes).into_owned())
+}
+
 /// Runs `git status --porcelain=v1` in the specified directory if git is available.
 /// Uses `GIT_OPTIONAL_LOCKS=0` to ensure background checks never conflict with user
 /// git commands or acquire background repository index locks.
 pub fn detect_git_status(cwd: &Path) -> Option<GitStatusSummary> {
-    let output = std::process::Command::new("git")
+    let mut command = Command::new("git");
+    command
         .arg("status")
         .arg("--porcelain=v1")
         .arg("--untracked-files=normal")
         .current_dir(cwd)
         .env("GIT_OPTIONAL_LOCKS", "0")
-        .env("LC_ALL", "C")
-        .output()
-        .ok()?;
+        .env("LC_ALL", "C");
 
-    if !output.status.success() {
-        return None;
-    }
-
-    let text = String::from_utf8_lossy(&output.stdout);
+    let text = run_command_with_timeout(command, GIT_STATUS_TIMEOUT)?;
     Some(parse_git_status(&text))
 }
 
@@ -156,10 +196,12 @@ pub fn detect_git_branches_for_cwds(cwds: &[String]) -> Vec<GitBranchInfo> {
     results
 }
 
-// Async so the filesystem scan runs off the main thread.
+// Offload blocking filesystem/subprocess work onto Tokio's blocking pool.
 #[tauri::command]
 pub async fn git_branches_detect(cwds: Vec<String>) -> Vec<GitBranchInfo> {
-    detect_git_branches_for_cwds(&cwds)
+    tauri::async_runtime::spawn_blocking(move || detect_git_branches_for_cwds(&cwds))
+        .await
+        .unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -299,5 +341,21 @@ UU conflict.txt
     fn parses_empty_git_status_as_zero_changes() {
         let summary = parse_git_status("");
         assert_eq!(summary, GitStatusSummary::default());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn command_with_timeout_returns_none_when_command_hangs() {
+        let mut slow = std::process::Command::new("/bin/sh");
+        slow.args(["-c", "sleep 5"]);
+        let start = std::time::Instant::now();
+        let output = run_command_with_timeout(slow, std::time::Duration::from_millis(80));
+        assert!(output.is_none(), "slow command should time out");
+        assert!(start.elapsed() < std::time::Duration::from_secs(2));
+
+        let mut fast = std::process::Command::new("/bin/sh");
+        fast.args(["-c", "printf 'ok'"]);
+        let ok = run_command_with_timeout(fast, std::time::Duration::from_secs(2));
+        assert_eq!(ok.as_deref(), Some("ok"));
     }
 }
