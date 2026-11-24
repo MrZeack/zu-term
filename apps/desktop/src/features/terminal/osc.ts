@@ -46,3 +46,24 @@ export function parseZuTermAgent(payload: string): AgentState | null | undefined
   const normalizedSessionId = normalizeAgentSessionId(sessionId);
   return normalizedSessionId ? { provider, sessionId: normalizedSessionId } : null;
 }
+
+const MAX_NOTIFICATION_LENGTH = 160;
+
+// OSC 9 (iTerm2/ConEmu) and OSC 99 (Kitty) terminal notifications.
+// Control characters are stripped and ConEmu progress reports (`4;...`) ignored.
+export function parseOscNotification(oscCode: 9 | 99, payload: string): string | null {
+  let raw = payload;
+  if (oscCode === 9) {
+    if (raw.startsWith('4;')) return null;
+  } else {
+    const separator = raw.indexOf(';');
+    if (separator < 0) return null;
+    raw = raw.slice(separator + 1);
+  }
+  const cleaned = raw
+    // eslint-disable-next-line no-control-regex -- intentionally stripping C0/DEL control chars
+    .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+    .trim()
+    .slice(0, MAX_NOTIFICATION_LENGTH);
+  return cleaned || null;
+}

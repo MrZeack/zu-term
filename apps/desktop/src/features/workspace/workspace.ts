@@ -363,3 +363,40 @@ export function windowTitleForWorkspace(
   const trimmed = workspaceName?.trim();
   return trimmed && trimmed.length > 0 ? trimmed : fallback;
 }
+
+function sameLayoutNode(a: LayoutNode, b: LayoutNode): boolean {
+  if (a.kind !== b.kind || a.id !== b.id) return false;
+  if (a.kind === 'pane') return true;
+  if (b.kind !== 'split') return false;
+  return (
+    a.direction === b.direction &&
+    Math.abs(a.ratio - b.ratio) < 0.001 &&
+    sameLayoutNode(a.first, b.first) &&
+    sameLayoutNode(a.second, b.second)
+  );
+}
+
+// Compares structural workspace state (layout, pane folders, names, agents and
+// active split) while ignoring volatile terminal titles such as agent spinners.
+export function sameWorkspaceSnapshot(a: WorkspaceSnapshot, b: WorkspaceSnapshot): boolean {
+  if (a.activeId !== b.activeId || !sameLayoutNode(a.root, b.root)) return false;
+  const aIds = Object.keys(a.panes);
+  const bIds = Object.keys(b.panes);
+  if (aIds.length !== bIds.length) return false;
+  for (const id of aIds) {
+    const left = a.panes[id];
+    const right = b.panes[id];
+    if (!left || !right) return false;
+    if (
+      left.cwd !== right.cwd ||
+      left.startCwd !== right.startCwd ||
+      left.name !== right.name ||
+      left.historyId !== right.historyId ||
+      left.agent?.provider !== right.agent?.provider ||
+      left.agent?.sessionId !== right.agent?.sessionId
+    ) {
+      return false;
+    }
+  }
+  return true;
+}

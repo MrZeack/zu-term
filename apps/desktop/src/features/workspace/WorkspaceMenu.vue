@@ -8,6 +8,7 @@ const props = defineProps<{
   workspaces: WorkspaceRecord[];
   error?: string | undefined;
   busy: boolean;
+  dirty?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -63,11 +64,21 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', closeOnOutside
       aria-haspopup="menu"
       :aria-expanded="open"
       aria-label="Abrir menú principal de workspaces"
-      title="Abrir menú principal de workspaces"
+      :title="
+        dirty
+          ? 'Abrir menú principal de workspaces · Cambios sin guardar'
+          : 'Abrir menú principal de workspaces'
+      "
       @click="toggleOpen"
     >
       <span class="workspace-trigger__kicker">WORKSPACE</span>
       <strong>{{ activeName }}</strong>
+      <span
+        v-if="dirty"
+        class="workspace-dirty-dot"
+        title="Cambios sin guardar"
+        aria-label="Cambios sin guardar"
+      />
       <span class="workspace-trigger__arrow" aria-hidden="true">⌄</span>
     </button>
     <div v-if="open" class="workspace-popover" role="menu" @click.stop>
@@ -202,6 +213,15 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', closeOnOutside
 .workspace-trigger__arrow {
   color: var(--accent);
   font-size: 13px;
+}
+
+.workspace-dirty-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--accent-alt);
+  box-shadow: 0 0 0 2px var(--accent-alt-soft);
 }
 
 .workspace-popover {

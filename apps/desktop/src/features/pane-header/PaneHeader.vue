@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, useTemplateRef, watch } from 'vue';
 import { UI_DENSITY } from '../../core/ui-density.ts';
 import { formatGitStatus, formatGitStatusTooltip, type GitStatusSummary } from '../git/git.ts';
+import type { PaneAttention } from '../layout/layout.store.ts';
 
 const props = defineProps<{
   title: string;
@@ -11,6 +12,7 @@ const props = defineProps<{
   gitStatus?: GitStatusSummary | undefined;
   active: boolean;
   renaming: boolean;
+  attention?: PaneAttention | undefined;
   canZoom?: boolean;
   zoomed?: boolean;
   draggable?: boolean;
@@ -38,6 +40,18 @@ const branchTooltip = computed(() => {
   if (!props.branch) return '';
   const diff = formatGitStatusTooltip(props.gitStatus);
   return diff ? `Rama git: ${props.branch} (${diff})` : `Rama git: ${props.branch}`;
+});
+const attentionLabel = computed(() => {
+  if (!props.attention) return '';
+  if (props.attention.kind === 'done') return 'Listo';
+  return 'Aviso';
+});
+const attentionTooltip = computed(() => {
+  if (!props.attention) return '';
+  if (props.attention.kind === 'done') {
+    return props.attention.message ? `Terminó: ${props.attention.message}` : 'Comando finalizado';
+  }
+  return props.attention.message || 'Este split requiere atención';
 });
 
 watch(
@@ -83,6 +97,10 @@ const commit = () => emit('rename', draft.value);
       <span v-if="command" class="command-badge">
         <span class="command-dot" aria-hidden="true" />
         {{ command }}
+      </span>
+      <span v-else-if="attention" class="attention-badge" :title="attentionTooltip">
+        <span class="attention-dot" aria-hidden="true" />
+        {{ attentionLabel }}
       </span>
       <h2 class="title" :title="title">{{ title }}</h2>
       <span v-if="branch" class="branch-badge" :title="branchTooltip">
@@ -244,6 +262,31 @@ const commit = () => emit('rename', draft.value);
   border-radius: 50%;
   background: var(--accent-alt);
   box-shadow: 0 0 0 2px var(--accent-alt-soft);
+}
+
+.attention-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border: 1px solid rgba(255, 198, 92, 0.45);
+  border-radius: 999px;
+  color: #ffd479;
+  background: rgba(255, 198, 92, 0.14);
+  font-family: Menlo, monospace;
+  font-size: var(--pane-meta-font-size);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.attention-dot {
+  width: 5px;
+  height: 5px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #ffd479;
+  box-shadow: 0 0 0 2px rgba(255, 198, 92, 0.25);
 }
 
 .title-input {

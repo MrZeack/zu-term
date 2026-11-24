@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseOsc7, parseZuTermAgent, parseZuTermCommand } from './osc.ts';
+import { parseOsc7, parseOscNotification, parseZuTermAgent, parseZuTermCommand } from './osc.ts';
 
 const HOST = 'mac.local';
 
@@ -93,4 +93,14 @@ test('parseOsc7 rejects other schemes and malformed input', () => {
   assert.equal(parseOsc7('file://mac.local', HOST), null);
   assert.equal(parseOsc7('file://mac.local/bad%zz', HOST), null);
   assert.equal(parseOsc7('', HOST), null);
+});
+
+test('parseOscNotification extrae alertas OSC 9 y OSC 99 e ignora progreso ConEmu y control chars', () => {
+  assert.equal(parseOscNotification(9, 'Claude necesita aprobación'), 'Claude necesita aprobación');
+  assert.equal(parseOscNotification(9, '4;1;50'), null);
+  assert.equal(parseOscNotification(9, '   '), null);
+  assert.equal(parseOscNotification(9, 'Listo\x07\x1b'), 'Listo');
+  assert.equal(parseOscNotification(99, 'i=1:d=0;Compilación terminada'), 'Compilación terminada');
+  assert.equal(parseOscNotification(99, 'i=1:d=0;'), null);
+  assert.equal(parseOscNotification(99, 'sin-separador'), null);
 });

@@ -5,6 +5,7 @@ import { APP_NAME } from '../../core/brand.ts';
 const props = defineProps<{
   visible: boolean;
   error?: string | undefined;
+  activeItems?: string[] | undefined;
 }>();
 
 const emit = defineEmits<{
@@ -46,6 +47,12 @@ watch(
       <p id="close-dialog-description">
         Puedes guardar el workspace actual y volver a abrir sus splits, carpetas y agentes.
       </p>
+      <div v-if="activeItems && activeItems.length > 0" class="close-dialog__active" role="status">
+        <strong>Se interrumpirán {{ activeItems.length }} procesos activos:</strong>
+        <ul>
+          <li v-for="item in activeItems" :key="item">{{ item }}</li>
+        </ul>
+      </div>
       <div class="close-dialog__actions">
         <button class="dialog-button dialog-button--quiet" type="button" @click="emit('cancel')">
           Cancelar
@@ -105,6 +112,29 @@ watch(
   color: var(--muted);
   font-size: 13px;
   line-height: 1.55;
+}
+
+.close-dialog__active {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 198, 92, 0.35);
+  border-radius: 10px;
+  background: rgba(255, 198, 92, 0.08);
+  color: #ffd479;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.close-dialog__active ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: var(--text);
+  font-family: Menlo, monospace;
+  font-size: 11px;
+}
+
+.close-dialog__active li + li {
+  margin-top: 3px;
 }
 
 .close-dialog__actions {

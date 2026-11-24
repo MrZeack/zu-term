@@ -19,6 +19,7 @@ import LayoutView from './features/layout/LayoutView.vue';
 import {
   createPaneActions,
   formatClosePaneConfirmation,
+  listActivePaneWork,
 } from './features/pane-actions/pane-actions.ts';
 import { paneTitle, shortPath } from './features/pane-header/pane-title.ts';
 import { createVisibilityPoller } from './features/polling/window-polling.ts';
@@ -65,6 +66,7 @@ import {
   createWorkspaceCatalog,
   findWorkspace,
   loadWorkspaceCatalog,
+  sameWorkspaceSnapshot,
   setActiveWorkspace,
   windowTitleForWorkspace,
   type WorkspaceCatalog,
@@ -81,6 +83,7 @@ const theme = ref<ThemeName>('cyan');
 const fontFamily = ref<TerminalFontId>(DEFAULT_TERMINAL_FONT_ID);
 const fontSize = ref<number>(DEFAULT_TERMINAL_FONT_SIZE);
 const closePromptVisible = ref(false);
+const closeActiveItems = ref<string[]>([]);
 const workspaceCatalog = ref<WorkspaceCatalog>(createWorkspaceCatalog());
 const workspaceDialogVisible = ref(false);
 const workspaceDialogMode = ref<'new' | 'save' | 'rename'>('new');
@@ -92,10 +95,19 @@ const splitActions = splitToolbarActions(isMac);
 const themeLabel = computed(() => (theme.value === 'cyan' ? 'Cian' : 'Menta'));
 const paneCount = computed(() => Object.keys(store.panes).length);
 const workspaceError = computed(() => errorStore.latestError?.message);
-const activeWorkspaceName = computed(
-  () => findWorkspace(workspaceCatalog.value, workspaceCatalog.value.activeId)?.name,
+const activeWorkspace = computed(() =>
+  findWorkspace(workspaceCatalog.value, workspaceCatalog.value.activeId),
 );
-const windowTitle = computed(() => windowTitleForWorkspace(activeWorkspaceName.value));
+const activeWorkspaceName = computed(() => activeWorkspace.value?.name);
+const workspaceDirty = computed(() => {
+  const current = activeWorkspace.value;
+  if (!current) return false;
+  return !sameWorkspaceSnapshot(current.snapshot, store.snapshot());
+});
+const windowTitle = computed(() => {
+  const base = windowTitleForWorkspace(activeWorkspaceName.value);
+  return store.attentionCount > 0 ? `● ${base}` : base;
+});
 
 const report = (error: unknown, fallback?: string) => {
   errorStore.report(error, fallback);
@@ -292,6 +304,26 @@ function onWindowFocus() {
   void statusPoller.trigger();
 }
 
+async function refreshCloseActiveItems() {
+  const foregroundIds = new Set<string>();
+  const checks = Object.entries(store.panes).map(async ([id, pane]) => {
+    if (pane.command?.trim()) return;
+    const busy = await terminals
+      .get(id)
+      ?.hasForegroundProcess?.()
+      .catch(() => false);
+    if (busy) foregroundIds.add(id);
+  });
+  await Promise.all(checks);
+  closeActiveItems.value = listActivePaneWork(store.panes, foregroundIds);
+}
+
+function openClosePrompt() {
+  closeActiveItems.value = listActivePaneWork(store.panes);
+  closePromptVisible.value = true;
+  void refreshCloseActiveItems();
+}
+
 function onKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape' && closePromptVisible.value) {
     event.preventDefault();
@@ -303,7 +335,7 @@ function onKeydown(event: KeyboardEvent) {
   if (isQuitShortcut(event, isMac) || isCloseWindowShortcut(event, isMac)) {
     event.preventDefault();
     event.stopPropagation();
-    closePromptVisible.value = true;
+    openClosePrompt();
     return;
   }
 
@@ -463,10 +495,12 @@ onMounted(async () => {
     unlistenClose = await appWindow.onCloseRequested((event) => {
       if (allowWindowClose) return;
       event.preventDefault();
-      closePromptVisible.value = true;
+      openClosePrompt();
     });
     unlistenRequestClose = await tauriListen('zu-term://request-close', () => {
       closePromptVisible.value = true;
+      closeActiveItems.value = listActivePaneWork(store.panes);
+      void refreshCloseActiveItems();
     });
   } catch (error) {
     report(error);
@@ -559,6 +593,7 @@ onBeforeUnmount(() => {
       :workspaces="workspaceCatalog.workspaces"
       :workspace-error="workspaceError"
       :workspace-busy="workspaceOperation.busy"
+      :workspace-dirty="workspaceDirty"
       :font-family="fontFamily"
       :font-size="fontSize"
       :split-actions="splitActions"
@@ -611,6 +646,7 @@ onBeforeUnmount(() => {
     <CloseConfirmDialog
       :visible="closePromptVisible"
       :error="workspaceError"
+      :active-items="closeActiveItems"
       @cancel="closePromptVisible = false"
       @confirm="finishClose"
     />

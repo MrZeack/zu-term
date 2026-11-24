@@ -9,7 +9,7 @@ import { UI_DENSITY } from '../../core/ui-density.ts';
 import { linkClient } from '../links/link-client.ts';
 import { attachTerminalLinks } from '../links/terminal-links.ts';
 import { buildAgentResumeCommand, type AgentState } from '../workspace/agent.ts';
-import { parseOsc7, parseZuTermAgent, parseZuTermCommand } from './osc.ts';
+import { parseOsc7, parseOscNotification, parseZuTermAgent, parseZuTermCommand } from './osc.ts';
 import { ptyClient } from './pty-client.ts';
 import { clampFontSize, resolveFontFamily, waitForFontLoad } from './terminal-font.ts';
 import { coalesce, debounce } from './resize-scheduler.ts';
@@ -36,6 +36,7 @@ const emit = defineEmits<{
   title: [title: string];
   command: [command: string | null];
   agent: [agent: AgentState | null];
+  attention: [kind: 'bell' | 'notification', message?: string];
   exit: [];
   focus: [];
   paste: [text: string];
@@ -203,6 +204,17 @@ onMounted(async () => {
     emit('agent', agent);
     return true;
   });
+  term.parser.registerOscHandler(9, (payload) => {
+    const message = parseOscNotification(9, payload);
+    if (message) emit('attention', 'notification', message);
+    return true;
+  });
+  term.parser.registerOscHandler(99, (payload) => {
+    const message = parseOscNotification(99, payload);
+    if (message) emit('attention', 'notification', message);
+    return true;
+  });
+  term.onBell(() => emit('attention', 'bell'));
   term.onTitleChange((title) => emit('title', title));
   term.onData((data) => {
     if (ptyId !== undefined) ptyClient.write(ptyId, data).catch(report);

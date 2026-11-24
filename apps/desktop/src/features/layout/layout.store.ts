@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import type { AgentState } from '../workspace/agent.ts';
 import { createWorkspaceSnapshot, type WorkspaceSnapshot } from '../workspace/workspace.ts';
 import {
@@ -21,6 +21,11 @@ import {
   type LayoutNode,
 } from './layout-tree.ts';
 
+export interface PaneAttention {
+  kind: 'done' | 'bell' | 'notification';
+  message?: string | undefined;
+}
+
 export interface PaneState {
   id: string;
   historyId?: string;
@@ -30,6 +35,7 @@ export interface PaneState {
   terminalTitle?: string;
   command?: string;
   agent?: AgentState;
+  attention?: PaneAttention;
 }
 
 export function createLayoutStore(nextId: () => string) {
@@ -44,6 +50,9 @@ export function createLayoutStore(nextId: () => string) {
     const activeId = ref(firstId);
     const renamingId = ref<string | null>(null);
     const zoomedPaneId = ref<string | null>(null);
+    const attentionCount = computed(
+      () => Object.values(panes.value).filter((pane) => Boolean(pane.attention)).length,
+    );
 
     function init(cwd: string) {
       const pane = panes.value[firstId] ?? panes.value[paneIds(root.value)[0] ?? ''];
@@ -117,9 +126,24 @@ export function createLayoutStore(nextId: () => string) {
     function setCommand(id: string, command: string | null) {
       const pane = panes.value[id];
       if (!pane) return;
+      const previous = pane.command;
       const trimmed = command?.trim() ?? '';
-      if (trimmed) pane.command = trimmed;
-      else delete pane.command;
+      if (trimmed) {
+        pane.command = trimmed;
+        delete pane.attention;
+      } else {
+        delete pane.command;
+        if (previous && id !== activeId.value) {
+          pane.attention = { kind: 'done', message: previous };
+        }
+      }
+    }
+
+    function markAttention(id: string, kind: PaneAttention['kind'], message?: string | undefined) {
+      const pane = panes.value[id];
+      if (!pane || id === activeId.value) return;
+      const trimmed = message?.trim();
+      pane.attention = trimmed ? { kind, message: trimmed } : { kind };
     }
 
     function setAgent(id: string, agent: AgentState | null) {
@@ -130,10 +154,12 @@ export function createLayoutStore(nextId: () => string) {
     }
 
     function focus(id: string) {
-      if (!panes.value[id]) return;
+      const pane = panes.value[id];
+      if (!pane) return;
       if (zoomedPaneId.value && zoomedPaneId.value !== id) {
         zoomedPaneId.value = null;
       }
+      delete pane.attention;
       activeId.value = id;
     }
 
@@ -142,10 +168,12 @@ export function createLayoutStore(nextId: () => string) {
         zoomedPaneId.value = null;
         return;
       }
-      if (!panes.value[id] || Object.keys(panes.value).length <= 1) {
+      const pane = panes.value[id];
+      if (!pane || Object.keys(panes.value).length <= 1) {
         zoomedPaneId.value = null;
         return;
       }
+      delete pane.attention;
       activeId.value = id;
       zoomedPaneId.value = id;
     }
@@ -250,6 +278,7 @@ export function createLayoutStore(nextId: () => string) {
       activeId,
       renamingId,
       zoomedPaneId,
+      attentionCount,
       init,
       getPane,
       split,
@@ -259,6 +288,7 @@ export function createLayoutStore(nextId: () => string) {
       setCwd,
       setTitle,
       setCommand,
+      markAttention,
       setAgent,
       focus,
       focusDirection,

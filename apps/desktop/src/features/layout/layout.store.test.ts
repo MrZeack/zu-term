@@ -226,3 +226,43 @@ test('navega el foco entre splits por dirección y ciclo, y gestiona zoom tempor
   store.split(right, 'row');
   assert.equal(store.zoomedPaneId, null);
 });
+
+test('marca atención en splits inactivos al terminar un comando o recibir alerta y la limpia al enfocar', () => {
+  const store = createLayoutStore(nextId)();
+  store.init('/home/me');
+  const [first] = paneIds(store.root);
+  assert.ok(first);
+  const second = store.split(first, 'row');
+  // second es el pane activo; first está inactivo.
+  assert.equal(store.activeId, second);
+  assert.equal(store.attentionCount, 0);
+
+  // Alertas en el pane activo no generan badge pendiente.
+  store.markAttention(second, 'bell');
+  assert.equal(store.panes[second]?.attention, undefined);
+  assert.equal(store.attentionCount, 0);
+
+  // Cuando termina un comando en un split inactivo, marca atención 'done'.
+  store.setCommand(first, 'claude');
+  store.setCommand(first, null);
+  assert.deepEqual(store.panes[first]?.attention, { kind: 'done', message: 'claude' });
+  assert.equal(store.attentionCount, 1);
+
+  // Al enfocar el split se limpia la atención.
+  store.focus(first);
+  assert.equal(store.panes[first]?.attention, undefined);
+  assert.equal(store.attentionCount, 0);
+
+  // Notificación explícita en split inactivo (ahora second es inactivo).
+  store.markAttention(second, 'notification', 'Esperando respuesta');
+  assert.deepEqual(store.panes[second]?.attention, {
+    kind: 'notification',
+    message: 'Esperando respuesta',
+  });
+  assert.equal(store.attentionCount, 1);
+
+  // Iniciar un nuevo comando limpia la atención previa.
+  store.setCommand(second, 'npm test');
+  assert.equal(store.panes[second]?.attention, undefined);
+  assert.equal(store.attentionCount, 0);
+});

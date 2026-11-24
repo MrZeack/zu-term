@@ -14,6 +14,7 @@ import {
   upsertWorkspace,
   reconcileWorkspaceCatalog,
   renameWorkspace,
+  sameWorkspaceSnapshot,
   windowTitleForWorkspace,
   type WorkspaceCatalog,
   type WorkspaceStorage,
@@ -54,6 +55,36 @@ const panes: Record<string, PaneState> = {
   },
   'pane-2': { id: 'pane-2', cwd: '/Users/me/project/api', agent: { provider: 'claude' } },
 };
+
+test('sameWorkspaceSnapshot detecta cambios estructurales e ignora títulos volátiles de terminal', () => {
+  const base = createWorkspaceSnapshot(root, panes, 'pane-1');
+  const titleChanged = createWorkspaceSnapshot(
+    root,
+    { ...panes, 'pane-1': { ...panes['pane-1']!, terminalTitle: '⠋ thinking…' } },
+    'pane-1',
+  );
+  assert.equal(sameWorkspaceSnapshot(base, titleChanged), true);
+
+  const cwdChanged = createWorkspaceSnapshot(
+    root,
+    { ...panes, 'pane-2': { ...panes['pane-2']!, cwd: '/tmp' } },
+    'pane-1',
+  );
+  assert.equal(sameWorkspaceSnapshot(base, cwdChanged), false);
+
+  const nameChanged = createWorkspaceSnapshot(
+    root,
+    { ...panes, 'pane-1': { ...panes['pane-1']!, name: 'Web' } },
+    'pane-1',
+  );
+  assert.equal(sameWorkspaceSnapshot(base, nameChanged), false);
+
+  const ratioChanged = createWorkspaceSnapshot({ ...root, ratio: 0.45 }, panes, 'pane-1');
+  assert.equal(sameWorkspaceSnapshot(base, ratioChanged), false);
+
+  const activeChanged = createWorkspaceSnapshot(root, panes, 'pane-2');
+  assert.equal(sameWorkspaceSnapshot(base, activeChanged), false);
+});
 
 test('crea un snapshot de workspace solo con agentes reanudables y sin comandos transitorios', () => {
   const snapshot = createWorkspaceSnapshot(root, panes, 'pane-2');

@@ -68,6 +68,39 @@ export function formatClosePaneConfirmation(target: {
   };
 }
 
+export function listActivePaneWork(
+  panes: Record<
+    string,
+    {
+      id: string;
+      name?: string | undefined;
+      terminalTitle?: string | undefined;
+      cwd?: string | undefined;
+      command?: string | undefined;
+      agent?: AgentState | undefined;
+    }
+  >,
+  foregroundPaneIds: ReadonlySet<string> = new Set(),
+): string[] {
+  const items: string[] = [];
+  for (const [id, pane] of Object.entries(panes)) {
+    const hasCommand = Boolean(pane.command?.trim());
+    const hasFg = foregroundPaneIds.has(id);
+    if (!hasCommand && !hasFg) continue;
+
+    const label = pane.name?.trim() || pane.terminalTitle?.trim() || 'Terminal';
+    if (pane.agent) {
+      const providerName = AGENT_DISPLAY_NAMES[pane.agent.provider] ?? pane.agent.provider;
+      items.push(`${label} · Agente ${providerName}`);
+    } else if (hasCommand) {
+      items.push(`${label} · ${pane.command!.trim()}`);
+    } else {
+      items.push(`${label} · Proceso en ejecución`);
+    }
+  }
+  return items;
+}
+
 export interface PaneActionDeps {
   store: {
     split(id: string, direction: Direction): string;

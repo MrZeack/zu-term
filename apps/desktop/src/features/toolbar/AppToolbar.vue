@@ -15,6 +15,7 @@ defineProps<{
   workspaces: WorkspaceRecord[];
   workspaceError: string | undefined;
   workspaceBusy: boolean;
+  workspaceDirty?: boolean;
   fontFamily: TerminalFontId;
   fontSize: number;
   splitActions: SplitToolbarAction[];
@@ -48,6 +49,7 @@ const emit = defineEmits<{
       :workspaces="workspaces"
       :error="workspaceError"
       :busy="workspaceBusy"
+      :dirty="workspaceDirty"
       @save="emit('saveWorkspace')"
       @rename="(id) => emit('renameWorkspace', id)"
       @new="emit('newWorkspace')"

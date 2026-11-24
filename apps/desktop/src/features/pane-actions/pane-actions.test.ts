@@ -6,6 +6,7 @@ import { createLayoutStore } from '../layout/layout.store.ts';
 import {
   createPaneActions,
   formatClosePaneConfirmation,
+  listActivePaneWork,
   paneHasActiveWork,
   type TerminalHandle,
 } from './pane-actions.ts';
@@ -224,4 +225,21 @@ test('cerrar split con proceso en primer plano en PTY (sin OSC command) pide con
   await actions.run('close', first);
   assert.equal(paneIds(store.root).length, 1);
   assert.deepEqual(calls, [`confirm-close:${first}:fg`]);
+});
+
+test('listActivePaneWork resume agentes, comandos y procesos en primer plano activos', () => {
+  const summary = listActivePaneWork(
+    {
+      p1: { id: 'p1', name: 'Backend', command: 'claude', agent: { provider: 'claude' } },
+      p2: { id: 'p2', name: 'Tests', command: 'npm test' },
+      p3: { id: 'p3', name: 'Idle', agent: { provider: 'codex' } },
+      p4: { id: 'p4', name: 'Subshell' },
+    },
+    new Set(['p4']),
+  );
+  assert.deepEqual(summary, [
+    'Backend · Agente Claude',
+    'Tests · npm test',
+    'Subshell · Proceso en ejecución',
+  ]);
 });
