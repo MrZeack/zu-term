@@ -47,6 +47,10 @@ test('reconcilia workspaces entre múltiples ventanas sin importar cuál se abri
 
 test('App.vue configura eventos y sincronización reactiva de workspaces para múltiples ventanas', async () => {
   const appSource = await readFile(new URL('../../App.vue', import.meta.url), 'utf8');
+  const controllerSource = await readFile(
+    new URL('./workspace-controller.ts', import.meta.url),
+    'utf8',
+  );
   const menuSource = await readFile(new URL('./WorkspaceMenu.vue', import.meta.url), 'utf8');
 
   // El backend avisa a todas las ventanas tras escribir; la UI solo escucha.
@@ -60,12 +64,12 @@ test('App.vue configura eventos y sincronización reactiva de workspaces para m�
 
   // Recarga al enfocar ventana y al abrir menú
   assert.match(appSource, /window\.addEventListener\('focus'/);
-  assert.match(appSource, /@open="reloadWorkspaces"/);
+  assert.match(appSource, /@open-workspace-menu=.*reloadWorkspaces/);
   assert.match(menuSource, /emit\('open'\)/);
 
   // Funciones de sincronización y reconciliación
-  assert.match(appSource, /reloadWorkspaces/);
-  assert.match(appSource, /reconcileWorkspaceCatalog/);
+  assert.match(controllerSource, /reloadWorkspaces/);
+  assert.match(controllerSource, /reconcileWorkspaceCatalog/);
 });
 
 test('App.vue actualiza el título de la ventana con el workspace activo o Zu Term', async () => {

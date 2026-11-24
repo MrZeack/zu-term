@@ -15,15 +15,26 @@ test('el arranque no restaura el workspace activo sin una selección explícita'
 
 test('el workspace solo se guarda con el botón o al cerrar, nunca con cada cambio', async () => {
   const appSource = await readFile(new URL('../../App.vue', import.meta.url), 'utf8');
+  const controllerSource = await readFile(
+    new URL('./workspace-controller.ts', import.meta.url),
+    'utf8',
+  );
 
   assert.doesNotMatch(appSource, /watch\(\s*\[\s*\(\) => store\.root/);
   assert.doesNotMatch(appSource, /deep: true/);
-  assert.match(appSource, /@save="saveWorkspaceFromMenu"/);
-  assert.match(appSource, /if \(restore && !\(await saveCurrentWorkspace\(\)\)\) return;/);
+  assert.match(appSource, /@save-workspace="saveWorkspaceFromMenu"/);
+  assert.match(
+    controllerSource,
+    /if \(save && !\(await saveCurrentWorkspace\(\)\)\) return false;/,
+  );
 });
 
 test('el workspace activo adquiere un lock y lo libera antes de cerrar la ventana', async () => {
   const appSource = await readFile(new URL('../../App.vue', import.meta.url), 'utf8');
+  const controllerSource = await readFile(
+    new URL('./workspace-controller.ts', import.meta.url),
+    'utf8',
+  );
   const clientSource = await readFile(
     new URL('./workspace-lock-client.ts', import.meta.url),
     'utf8',
@@ -32,12 +43,15 @@ test('el workspace activo adquiere un lock y lo libera antes de cerrar la ventan
   assert.match(clientSource, /workspace_lock_acquire/);
   assert.match(clientSource, /workspace_lock_release_all/);
   assert.match(appSource, /locks: workspaceLockClient/);
-  assert.match(appSource, /session\.acquire\(id\)/);
-  assert.match(appSource, /if \(!\(await session\.releaseAll\(\)\)\) return/);
+  assert.match(controllerSource, /session\.acquire\(id\)/);
+  assert.match(controllerSource, /return await session\.releaseAll\(\)/);
 });
 
 test('el cierre espera si otra restauración de workspace sigue en curso', async () => {
-  const appSource = await readFile(new URL('../../App.vue', import.meta.url), 'utf8');
+  const controllerSource = await readFile(
+    new URL('./workspace-controller.ts', import.meta.url),
+    'utf8',
+  );
 
-  assert.match(appSource, /if \(workspaceOperation\.busy\) return/);
+  assert.match(controllerSource, /if \(operation\.busy\) return false/);
 });

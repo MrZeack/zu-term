@@ -79,7 +79,7 @@ grep -qF "if: github.event_name == 'release' || (github.event_name == 'push' && 
   .github/workflows/ci.yml || fail "el bundle se ejecuta fuera de tags y releases"
 grep -q 'aria-label="Cerrar split"' apps/desktop/src/features/pane-header/PaneHeader.vue \
   || fail "la cabecera no ofrece cerrar split"
-grep -q 'Cerrar y guardar workspace' apps/desktop/src/App.vue \
+grep -q 'Cerrar y guardar workspace' apps/desktop/src/features/workspace/CloseConfirmDialog.vue \
   || fail "falta la opción de guardar workspace al cerrar"
 grep -Fq 'zu-term-window-*' apps/desktop/src-tauri/capabilities/default.json \
   || fail "las ventanas nuevas no tienen capability"

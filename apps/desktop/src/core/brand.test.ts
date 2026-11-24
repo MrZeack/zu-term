@@ -22,9 +22,12 @@ test('defines the Zu Term identity used by the desktop runtime', () => {
 });
 
 test('keeps the toolbar brand as text without a second visual mark', async () => {
-  const appSource = await readFile(new URL('../App.vue', import.meta.url), 'utf8');
+  const toolbarSource = await readFile(
+    new URL('../features/toolbar/AppToolbar.vue', import.meta.url),
+    'utf8',
+  );
 
-  assert.match(appSource, /<span class="brand-name">\{\{ APP_NAME \}\}<\/span>/);
-  assert.match(appSource, /class="brand-version">v\{\{ APP_VERSION \}\}<\/span>/);
-  assert.doesNotMatch(appSource, /brand-(?:icon|mark)/);
+  assert.match(toolbarSource, /<span class="brand-name">\{\{ APP_NAME \}\}<\/span>/);
+  assert.match(toolbarSource, /class="brand-version">v\{\{ APP_VERSION \}\}<\/span>/);
+  assert.doesNotMatch(toolbarSource, /brand-(?:icon|mark)/);
 });

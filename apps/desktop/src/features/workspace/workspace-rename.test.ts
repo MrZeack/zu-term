@@ -30,12 +30,17 @@ test('WorkspaceNameDialog.vue soporta prellenado y selección del nombre actual'
 
 test('App.vue conecta la acción de renombrar workspace con el diálogo y la persistencia', async () => {
   const appSource = await readFile(new URL('../../App.vue', import.meta.url), 'utf8');
+  const toolbarSource = await readFile(
+    new URL('../toolbar/AppToolbar.vue', import.meta.url),
+    'utf8',
+  );
 
   // Modo rename en el diálogo
   assert.match(appSource, /'rename'/);
 
-  // Manejador @rename conectado a WorkspaceMenu
-  assert.match(appSource, /@rename=/);
+  // Manejador @rename conectado a WorkspaceMenu a través de AppToolbar
+  assert.match(toolbarSource, /@rename=/);
+  assert.match(appSource, /@rename-workspace=/);
 
   // Pasa initial-name al diálogo de workspace
   assert.match(appSource, /:initial-name=/);

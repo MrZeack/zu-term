@@ -3,13 +3,13 @@ import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 
 test('deja la barra global enfocada en la marca y las acciones', async () => {
-  const appSource = await readFile(new URL('../../App.vue', import.meta.url), 'utf8');
+  const toolbarSource = await readFile(new URL('./AppToolbar.vue', import.meta.url), 'utf8');
 
-  assert.match(appSource, /class="brand"/);
-  assert.match(appSource, /WorkspaceMenu/);
-  assert.match(appSource, /class="toolbar-actions"/);
-  assert.doesNotMatch(appSource, /active-context/);
-  assert.doesNotMatch(appSource, /activePane(?:Title|Path)/);
+  assert.match(toolbarSource, /class="brand"/);
+  assert.match(toolbarSource, /WorkspaceMenu/);
+  assert.match(toolbarSource, /class="toolbar-actions"/);
+  assert.doesNotMatch(toolbarSource, /active-context/);
+  assert.doesNotMatch(toolbarSource, /activePane(?:Title|Path)/);
 });
 
 test('mantiene el agente, nombre y carpeta en la cabecera de cada split', async () => {
@@ -25,6 +25,10 @@ test('mantiene el agente, nombre y carpeta en la cabecera de cada split', async 
 
 test('mantiene guardar, nuevo y restaurar dentro del menú principal de workspace', async () => {
   const appSource = await readFile(new URL('../../App.vue', import.meta.url), 'utf8');
+  const controllerSource = await readFile(
+    new URL('../workspace/workspace-controller.ts', import.meta.url),
+    'utf8',
+  );
   const workspaceMenuSource = await readFile(
     new URL('../workspace/WorkspaceMenu.vue', import.meta.url),
     'utf8',
@@ -36,7 +40,7 @@ test('mantiene guardar, nuevo y restaurar dentro del menú principal de workspac
   assert.match(workspaceMenuSource, /Nuevo workspace/);
   assert.match(workspaceMenuSource, /Restaurar workspace/);
   assert.match(appSource, /useWorkspaceOperationStore/);
-  assert.match(appSource, /workspaceOperation\.begin\('restore'/);
+  assert.match(controllerSource, /operation\.begin\('restore'/);
   assert.match(workspaceMenuSource, /:disabled="busy"/);
   assert.doesNotMatch(workspaceMenuSource, /workspace-quick-actions/);
 });
@@ -102,12 +106,13 @@ test('pasa el historial estable de cada pane al proceso de la PTY', async () => 
 });
 
 test('incorpora selector de tipografía y controles de tamaño en la barra global', async () => {
+  const toolbarSource = await readFile(new URL('./AppToolbar.vue', import.meta.url), 'utf8');
   const appSource = await readFile(new URL('../../App.vue', import.meta.url), 'utf8');
   const fontMenuSource = await readFile(new URL('./FontMenu.vue', import.meta.url), 'utf8');
 
-  assert.match(appSource, /<FontMenu/);
-  assert.match(appSource, /class="font-size-control"/);
-  assert.match(appSource, /class="font-size-btn"/);
+  assert.match(toolbarSource, /<FontMenu/);
+  assert.match(toolbarSource, /class="font-size-control"/);
+  assert.match(toolbarSource, /class="font-size-btn"/);
   assert.match(appSource, /increaseFontSize/);
   assert.match(appSource, /decreaseFontSize/);
   assert.match(appSource, /resetFontSize/);
