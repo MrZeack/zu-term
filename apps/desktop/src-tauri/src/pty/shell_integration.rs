@@ -113,7 +113,7 @@ mod tests {
 
     use portable_pty::CommandBuilder;
 
-    use super::{BASH_DIR, FISH_DIR, ZSH_DIR, apply};
+    use super::{BASH_DIR, FISH_DIR, FISH_INTEGRATION, ZSH_DIR, apply};
     use crate::config::test_dir;
     use crate::pty::registry::{PtyEvent, PtyRegistry};
 
@@ -170,6 +170,15 @@ mod tests {
             assert_eq!(mode & 0o777, 0o600);
         }
         fs::remove_dir_all(config).expect("cleanup");
+    }
+
+    // fish rejects a `fish_history` name with anything but letters, digits
+    // and `_`, and history ids look like `pane-<uuid>`.
+    #[test]
+    fn fish_history_name_only_keeps_characters_fish_accepts() {
+        assert!(FISH_INTEGRATION.contains(
+            r#"set -g fish_history "zu_term_"(string replace -ra '[^A-Za-z0-9_]' _ -- $ZU_TERM_HISTORY_ID)"#
+        ));
     }
 
     #[test]

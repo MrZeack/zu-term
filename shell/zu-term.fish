@@ -13,7 +13,8 @@ if not status is-interactive; or not set -q ZU_TERM_TERMINAL
 end
 
 if set -q ZU_TERM_HISTORY_ID; and string match -qr '^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$' -- $ZU_TERM_HISTORY_ID
-    set -g fish_history "zu_term_"(string replace -a '.' '_' -- $ZU_TERM_HISTORY_ID)
+    # fish only accepts letters, digits and `_` in a history name.
+    set -g fish_history "zu_term_"(string replace -ra '[^A-Za-z0-9_]' _ -- $ZU_TERM_HISTORY_ID)
 end
 
 function _zu_term_osc7 --on-variable PWD --on-event fish_prompt
