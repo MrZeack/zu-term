@@ -11,12 +11,15 @@ const props = defineProps<{
   gitStatus?: GitStatusSummary | undefined;
   active: boolean;
   renaming: boolean;
+  canZoom?: boolean;
+  zoomed?: boolean;
   draggable?: boolean;
   dragging?: boolean;
 }>();
 const emit = defineEmits<{
   rename: [name: string];
   startRename: [];
+  toggleZoom: [];
   close: [];
   dragstart: [event: DragEvent];
   dragend: [];
@@ -89,6 +92,22 @@ const commit = () => emit('rename', draft.value);
       </span>
     </div>
     <span class="path" :title="path">{{ path }}</span>
+    <button
+      v-if="canZoom || zoomed"
+      class="pane-zoom"
+      :class="{ active: zoomed }"
+      type="button"
+      :aria-label="zoomed ? 'Restaurar distribución de splits' : 'Maximizar split'"
+      :title="
+        zoomed
+          ? 'Restaurar splits (⌘⇧↵ / Ctrl+Shift+Enter)'
+          : 'Maximizar split (⌘⇧↵ / Ctrl+Shift+Enter)'
+      "
+      draggable="false"
+      @click.stop="emit('toggleZoom')"
+    >
+      <span aria-hidden="true">{{ zoomed ? '⤡' : '⤢' }}</span>
+    </button>
     <button
       class="pane-close"
       type="button"
@@ -251,6 +270,7 @@ const commit = () => emit('rename', draft.value);
   max-width: 48%;
 }
 
+.pane-zoom,
 .pane-close {
   display: inline-grid;
   flex: 0 0 auto;
@@ -272,12 +292,24 @@ const commit = () => emit('rename', draft.value);
     background 140ms ease;
 }
 
+.pane-zoom {
+  font-size: 11px;
+}
+
+.pane-zoom.active {
+  border-color: var(--accent-border);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.pane-zoom:hover,
 .pane-close:hover {
   border-color: var(--accent-alt-border);
   color: var(--text);
   background: var(--accent-alt-soft);
 }
 
+.pane-zoom:focus-visible,
 .pane-close:focus-visible {
   outline: 2px solid var(--accent-alt);
   outline-offset: 2px;

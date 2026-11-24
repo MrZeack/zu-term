@@ -5,6 +5,7 @@ import {
   fontZoomAction,
   isCloseWindowShortcut,
   isQuitShortcut,
+  navigationShortcutAction,
   shortcutAction,
   type KeyInput,
 } from './shortcuts.ts';
@@ -90,6 +91,41 @@ test('detecta atajos de zoom de tipografía en macOS y Linux', () => {
   // Ctrl+_ en Linux se deja libre para undo en readline/emacs.
   assert.equal(fontZoomAction(key('_', { ctrlKey: true, shiftKey: true }), false), null);
   assert.equal(fontZoomAction(key('0', { ctrlKey: true }), false), 'reset');
+});
+
+test('detecta atajos de navegación entre splits y zoom temporal en macOS y Linux', () => {
+  // macOS: Cmd+Opt+Flechas, Cmd+[ / ], Cmd+Shift+Enter
+  assert.equal(
+    navigationShortcutAction(key('ArrowRight', { metaKey: true, altKey: true }), true),
+    'focus-right',
+  );
+  assert.equal(
+    navigationShortcutAction(key('ArrowLeft', { metaKey: true, altKey: true }), true),
+    'focus-left',
+  );
+  assert.equal(
+    navigationShortcutAction(key('ArrowUp', { metaKey: true, altKey: true }), true),
+    'focus-up',
+  );
+  assert.equal(
+    navigationShortcutAction(key('ArrowDown', { metaKey: true, altKey: true }), true),
+    'focus-down',
+  );
+  assert.equal(navigationShortcutAction(key('[', { metaKey: true }), true), 'focus-prev');
+  assert.equal(navigationShortcutAction(key(']', { metaKey: true }), true), 'focus-next');
+  assert.equal(
+    navigationShortcutAction(key('Enter', { metaKey: true, shiftKey: true }), true),
+    'toggle-zoom',
+  );
+
+  // Linux: Ctrl+Shift+Flechas, Ctrl+Shift+PageUp/PageDown, Ctrl+Shift+Enter
+  const linux = { ctrlKey: true, shiftKey: true };
+  assert.equal(navigationShortcutAction(key('ArrowRight', linux), false), 'focus-right');
+  assert.equal(navigationShortcutAction(key('ArrowUp', linux), false), 'focus-up');
+  assert.equal(navigationShortcutAction(key('PageUp', linux), false), 'focus-prev');
+  assert.equal(navigationShortcutAction(key('PageDown', linux), false), 'focus-next');
+  assert.equal(navigationShortcutAction(key('Enter', linux), false), 'toggle-zoom');
+  assert.equal(navigationShortcutAction(key('ArrowLeft', { altKey: true }), false), null);
 });
 
 test('App.vue escucha zu-term://request-close para desplegar confirmación de cierre', async () => {

@@ -36,6 +36,44 @@ export function shortcutAction(event: KeyInput, isMac: boolean): PaneAction | nu
 
 export type FontZoomAction = 'increase' | 'decrease' | 'reset';
 
+export type LayoutNavigationAction =
+  | 'focus-up'
+  | 'focus-down'
+  | 'focus-left'
+  | 'focus-right'
+  | 'focus-next'
+  | 'focus-prev'
+  | 'toggle-zoom';
+
+const ARROW_DIRECTIONS: Record<string, LayoutNavigationAction> = {
+  ArrowUp: 'focus-up',
+  ArrowDown: 'focus-down',
+  ArrowLeft: 'focus-left',
+  ArrowRight: 'focus-right',
+};
+
+export function navigationShortcutAction(
+  event: KeyInput,
+  isMac: boolean,
+): LayoutNavigationAction | null {
+  if (isMac) {
+    if (!event.metaKey || event.ctrlKey) return null;
+    if (event.altKey && !event.shiftKey) {
+      return ARROW_DIRECTIONS[event.key] ?? null;
+    }
+    if (event.altKey) return null;
+    if (event.shiftKey && event.key === 'Enter') return 'toggle-zoom';
+    if (!event.shiftKey && event.key === '[') return 'focus-prev';
+    if (!event.shiftKey && event.key === ']') return 'focus-next';
+    return null;
+  }
+  if (!event.ctrlKey || !event.shiftKey || event.metaKey || event.altKey) return null;
+  if (event.key === 'Enter') return 'toggle-zoom';
+  if (event.key === 'PageUp' || event.key === '{' || event.key === '[') return 'focus-prev';
+  if (event.key === 'PageDown' || event.key === '}' || event.key === ']') return 'focus-next';
+  return ARROW_DIRECTIONS[event.key] ?? null;
+}
+
 export function fontZoomAction(event: KeyInput, isMac: boolean): FontZoomAction | null {
   const mod = isMac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
   if (!mod || event.altKey) return null;

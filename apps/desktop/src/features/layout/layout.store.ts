@@ -3,6 +3,12 @@ import { ref } from 'vue';
 import type { AgentState } from '../workspace/agent.ts';
 import { createWorkspaceSnapshot, type WorkspaceSnapshot } from '../workspace/workspace.ts';
 import {
+  computeGeometry,
+  cyclePaneId,
+  findAdjacentPane,
+  type FocusDirection,
+} from './layout-geometry.ts';
+import {
   closePane,
   movePane,
   movePaneToEdge,
@@ -37,6 +43,7 @@ export function createLayoutStore(nextId: () => string) {
     });
     const activeId = ref(firstId);
     const renamingId = ref<string | null>(null);
+    const zoomedPaneId = ref<string | null>(null);
 
     function init(cwd: string) {
       const pane = panes.value[firstId] ?? panes.value[paneIds(root.value)[0] ?? ''];
@@ -67,6 +74,7 @@ export function createLayoutStore(nextId: () => string) {
           ? { id, historyId: historyId() }
           : { id, historyId: historyId(), startCwd: cwd, cwd };
       activeId.value = id;
+      zoomedPaneId.value = null;
       return id;
     }
 
@@ -76,6 +84,9 @@ export function createLayoutStore(nextId: () => string) {
       if (!next) return false;
       root.value = next;
       delete panes.value[id];
+      if (zoomedPaneId.value === id || Object.keys(panes.value).length <= 1) {
+        zoomedPaneId.value = null;
+      }
       if (activeId.value === id) activeId.value = paneIds(next)[0] ?? '';
       return true;
     }
@@ -119,7 +130,38 @@ export function createLayoutStore(nextId: () => string) {
     }
 
     function focus(id: string) {
-      if (panes.value[id]) activeId.value = id;
+      if (!panes.value[id]) return;
+      if (zoomedPaneId.value && zoomedPaneId.value !== id) {
+        zoomedPaneId.value = null;
+      }
+      activeId.value = id;
+    }
+
+    function toggleZoom(id = activeId.value) {
+      if (zoomedPaneId.value === id) {
+        zoomedPaneId.value = null;
+        return;
+      }
+      if (!panes.value[id] || Object.keys(panes.value).length <= 1) {
+        zoomedPaneId.value = null;
+        return;
+      }
+      activeId.value = id;
+      zoomedPaneId.value = id;
+    }
+
+    function focusDirection(direction: FocusDirection): boolean {
+      const target = findAdjacentPane(computeGeometry(root.value).panes, activeId.value, direction);
+      if (!target) return false;
+      focus(target);
+      return true;
+    }
+
+    function focusCycle(delta: 1 | -1): boolean {
+      const target = cyclePaneId(computeGeometry(root.value).panes, activeId.value, delta);
+      if (!target) return false;
+      focus(target);
+      return true;
     }
 
     function resize(splitId: string, ratio: number) {
@@ -145,6 +187,7 @@ export function createLayoutStore(nextId: () => string) {
       if (next === root.value) return false;
       root.value = next;
       activeId.value = sourceId;
+      zoomedPaneId.value = null;
       return true;
     }
 
@@ -163,6 +206,7 @@ export function createLayoutStore(nextId: () => string) {
       panes.value = { [firstId]: { id: firstId, historyId: historyId(), startCwd: cwd, cwd } };
       activeId.value = firstId;
       renamingId.value = null;
+      zoomedPaneId.value = null;
     }
 
     function snapshot(): WorkspaceSnapshot {
@@ -192,6 +236,7 @@ export function createLayoutStore(nextId: () => string) {
       );
       activeId.value = workspace.activeId;
       renamingId.value = null;
+      zoomedPaneId.value = null;
       return true;
     }
 
@@ -204,6 +249,7 @@ export function createLayoutStore(nextId: () => string) {
       panes,
       activeId,
       renamingId,
+      zoomedPaneId,
       init,
       getPane,
       split,
@@ -215,6 +261,9 @@ export function createLayoutStore(nextId: () => string) {
       setCommand,
       setAgent,
       focus,
+      focusDirection,
+      focusCycle,
+      toggleZoom,
       resize,
       move,
       moveToEdge,

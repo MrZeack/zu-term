@@ -26,6 +26,7 @@ import {
   fontZoomAction,
   isCloseWindowShortcut,
   isQuitShortcut,
+  navigationShortcutAction,
   shortcutAction,
 } from './features/shortcuts/shortcuts.ts';
 import StatusBar from './features/status/StatusBar.vue';
@@ -313,6 +314,20 @@ function onKeydown(event: KeyboardEvent) {
     if (zoom === 'increase') increaseFontSize();
     else if (zoom === 'decrease') decreaseFontSize();
     else resetFontSize();
+    return;
+  }
+
+  const nav = navigationShortcutAction(event, isMac);
+  if (nav) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (nav === 'toggle-zoom') store.toggleZoom();
+    else if (nav === 'focus-next') store.focusCycle(1);
+    else if (nav === 'focus-prev') store.focusCycle(-1);
+    else if (nav === 'focus-up') store.focusDirection('up');
+    else if (nav === 'focus-down') store.focusDirection('down');
+    else if (nav === 'focus-left') store.focusDirection('left');
+    else if (nav === 'focus-right') store.focusDirection('right');
     return;
   }
 

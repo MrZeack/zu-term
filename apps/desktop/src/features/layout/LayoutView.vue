@@ -45,7 +45,29 @@ type DropTarget = { paneId: string; zone: DropZone } | { paneId: null; zone: Edg
 const dropTarget = ref<DropTarget | null>(null);
 
 const pct = (n: number) => `${n * 100}%`;
-const paneStyle = (rect: Rect) => ({
+const paneStyle = (id: string, rect: Rect) => {
+  if (store.zoomedPaneId) {
+    if (store.zoomedPaneId === id) {
+      return { left: '0%', top: '0%', width: '100%', height: '100%', zIndex: 5 };
+    }
+    return {
+      left: pct(rect.x),
+      top: pct(rect.y),
+      width: pct(rect.width),
+      height: pct(rect.height),
+      visibility: 'hidden' as const,
+      pointerEvents: 'none' as const,
+      zIndex: 0,
+    };
+  }
+  return {
+    left: pct(rect.x),
+    top: pct(rect.y),
+    width: pct(rect.width),
+    height: pct(rect.height),
+  };
+};
+const previewStyle = (rect: Rect) => ({
   left: pct(rect.x),
   top: pct(rect.y),
   width: pct(rect.width),
@@ -185,7 +207,7 @@ const dropPreviewRect = computed<Rect | null>(() => {
       :key="id"
       class="pane"
       :class="paneClasses(id)"
-      :style="paneStyle(rect)"
+      :style="paneStyle(id, rect)"
       @mousedown="store.focus(id)"
       @contextmenu.prevent="openMenu(id, $event)"
     >
@@ -201,10 +223,13 @@ const dropPreviewRect = computed<Rect | null>(() => {
         "
         :active="store.activeId === id"
         :renaming="store.renamingId === id"
-        :draggable="true"
+        :can-zoom="geometry.panes.length > 1"
+        :zoomed="store.zoomedPaneId === id"
+        :draggable="!store.zoomedPaneId"
         :dragging="draggedPaneId === id"
         @start-rename="store.startRename(id)"
         @rename="(name) => store.rename(id, name)"
+        @toggle-zoom="store.toggleZoom(id)"
         @close="emit('close', id)"
         @dragstart="startPaneDrag(id, $event)"
         @dragend="endPaneDrag"
@@ -229,19 +254,21 @@ const dropPreviewRect = computed<Rect | null>(() => {
         @paste="(text) => emit('paste', id, text)"
       />
     </section>
-    <div
-      v-for="divider in geometry.dividers"
-      :key="divider.splitId"
-      class="divider"
-      :class="divider.direction"
-      :style="dividerStyle(divider)"
-      @pointerdown.prevent="(event) => startDrag(divider, event)"
-    />
+    <template v-if="!store.zoomedPaneId">
+      <div
+        v-for="divider in geometry.dividers"
+        :key="divider.splitId"
+        class="divider"
+        :class="divider.direction"
+        :style="dividerStyle(divider)"
+        @pointerdown.prevent="(event) => startDrag(divider, event)"
+      />
+    </template>
     <div
       v-if="dropPreviewRect"
       class="drop-preview"
       :class="{ 'drop-center': dropTarget?.zone === 'center' }"
-      :style="paneStyle(dropPreviewRect)"
+      :style="previewStyle(dropPreviewRect)"
     />
   </div>
 </template>

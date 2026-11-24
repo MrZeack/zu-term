@@ -185,3 +185,44 @@ test('getPane devuelve el estado del pane correspondiente o undefined', () => {
   assert.equal(store.getPane(first)?.cwd, '/home/me');
   assert.equal(store.getPane('non-existent'), undefined);
 });
+
+test('navega el foco entre splits por dirección y ciclo, y gestiona zoom temporal', () => {
+  const store = createLayoutStore(nextId)();
+  store.init('/home/me');
+  const [first] = paneIds(store.root);
+  assert.ok(first);
+
+  // Con un solo split, toggleZoom no activa zoom.
+  store.toggleZoom(first);
+  assert.equal(store.zoomedPaneId, null);
+
+  const right = store.split(first, 'row');
+  const bottomRight = store.split(right, 'column');
+  assert.equal(store.activeId, bottomRight);
+
+  // Navegación espacial y cíclica
+  store.focusDirection('up');
+  assert.equal(store.activeId, right);
+  store.focusDirection('left');
+  assert.equal(store.activeId, first);
+  store.focusCycle(-1);
+  assert.equal(store.activeId, bottomRight);
+  store.focusCycle(1);
+  assert.equal(store.activeId, first);
+
+  // Zoom temporal activa y desactiva, y se limpia al enfocar otro pane o dividir
+  store.toggleZoom(first);
+  assert.equal(store.zoomedPaneId, first);
+  store.toggleZoom(first);
+  assert.equal(store.zoomedPaneId, null);
+
+  store.toggleZoom(first);
+  assert.equal(store.zoomedPaneId, first);
+  store.focus(right);
+  assert.equal(store.zoomedPaneId, null);
+
+  store.toggleZoom(right);
+  assert.equal(store.zoomedPaneId, right);
+  store.split(right, 'row');
+  assert.equal(store.zoomedPaneId, null);
+});
