@@ -140,3 +140,31 @@ test('pide confirmación al cerrar un split con procesos o agentes activos', asy
   assert.match(paneActionsSource, /paneHasActiveWork/);
   assert.match(paneActionsSource, /confirmClose/);
 });
+
+test('la cabecera del split pone carpeta y nombre a la izquierda; agente y rama a la derecha', async () => {
+  const header = await readFile(new URL('../pane-header/PaneHeader.vue', import.meta.url), 'utf8');
+  const template = header.slice(header.indexOf('<template>'));
+  const at = (pattern: string) => {
+    const index = template.indexOf(pattern);
+    assert.ok(index >= 0, `missing ${pattern}`);
+    return index;
+  };
+
+  assert.ok(at('class="pane-start"') < at('class="path"'));
+  assert.ok(at('class="path"') < at('class="title"'), 'folder first, then the name');
+  assert.ok(at('class="title"') < at('class="pane-end"'));
+  assert.ok(at('class="pane-end"') < at('class="command-badge"'));
+  assert.ok(at('class="command-badge"') < at('class="branch-badge"'), 'agent, then branch');
+  assert.ok(at('class="branch-badge"') < at('class="pane-zoom"'));
+  assert.match(header, /\.pane-end \{[^}]*margin-left: auto;/);
+});
+
+test('los botones de dividir a la derecha y abajo van a la izquierda de la barra', async () => {
+  const toolbar = await readFile(new URL('./AppToolbar.vue', import.meta.url), 'utf8');
+  const template = toolbar.slice(toolbar.indexOf('<template>'));
+
+  assert.ok(template.indexOf('<WorkspaceMenu') < template.indexOf('class="toolbar-actions"'));
+  assert.ok(
+    template.indexOf('class="toolbar-actions"') < template.indexOf('class="toolbar-spacer"'),
+  );
+});

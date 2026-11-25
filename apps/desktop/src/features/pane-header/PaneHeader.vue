@@ -80,22 +80,26 @@ const commit = () => emit('rename', draft.value);
     @dragstart="emit('dragstart', $event)"
     @dragend="emit('dragend')"
   >
-    <input
-      v-if="renaming"
-      ref="input"
-      v-model="draft"
-      class="title-input"
-      maxlength="80"
-      autocapitalize="off"
-      autocorrect="off"
-      spellcheck="false"
-      aria-label="Nombre del split"
-      draggable="false"
-      @keydown.enter.prevent="commit"
-      @keydown.esc.prevent="emit('rename', title)"
-      @blur="commit"
-    />
-    <div v-else class="title-row">
+    <div class="pane-start">
+      <span v-if="path" class="path" :title="path">{{ path }}</span>
+      <input
+        v-if="renaming"
+        ref="input"
+        v-model="draft"
+        class="title-input"
+        maxlength="80"
+        autocapitalize="off"
+        autocorrect="off"
+        spellcheck="false"
+        aria-label="Nombre del split"
+        draggable="false"
+        @keydown.enter.prevent="commit"
+        @keydown.esc.prevent="emit('rename', title)"
+        @blur="commit"
+      />
+      <h2 v-else class="title" :title="title">{{ title }}</h2>
+    </div>
+    <div class="pane-end">
       <span v-if="command" class="command-badge" :class="agentTone && `agent-${agentTone}`">
         <span class="command-dot" aria-hidden="true" />
         {{ command }}
@@ -104,14 +108,12 @@ const commit = () => emit('rename', draft.value);
         <span class="attention-dot" aria-hidden="true" />
         {{ attentionLabel }}
       </span>
-      <h2 class="title" :title="title">{{ title }}</h2>
       <span v-if="branch" class="branch-badge" :title="branchTooltip">
         <span class="branch-icon" aria-hidden="true">⎇</span>
         <span class="branch-name">{{ branch }}</span>
         <span v-if="gitStatusText" class="branch-status">{{ gitStatusText }}</span>
       </span>
     </div>
-    <span class="path" :title="path">{{ path }}</span>
     <button
       v-if="canZoom || zoomed"
       class="pane-zoom"
@@ -189,12 +191,22 @@ const commit = () => emit('rename', draft.value);
   min-width: 0;
 }
 
-.title-row {
+.pane-start,
+.pane-end {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 1;
   min-width: 0;
+}
+
+.pane-start {
+  flex: 1 1 auto;
+}
+
+.pane-end {
+  flex: 0 1 auto;
+  max-width: 55%;
+  margin-left: auto;
 }
 
 .command-badge {
@@ -202,7 +214,7 @@ const commit = () => emit('rename', draft.value);
   align-items: center;
   gap: 5px;
   flex: 0 0 auto;
-  max-width: 42%;
+  max-width: 100%;
   padding: 3px 6px;
   border: 1px solid var(--accent-alt-border);
   border-radius: 999px;
@@ -229,8 +241,8 @@ const commit = () => emit('rename', draft.value);
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  flex: 0 0 auto;
-  max-width: 42%;
+  flex: 0 1 auto;
+  max-width: 100%;
   padding: 2px 6px;
   border: 1px solid var(--accent-border);
   border-radius: 999px;
@@ -310,17 +322,15 @@ const commit = () => emit('rename', draft.value);
 }
 
 .path {
-  flex: 1;
+  flex: 0 1 auto;
   color: var(--muted);
   font-size: var(--pane-meta-font-size);
   font-family: Menlo, monospace;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  direction: ltr;
-  text-align: right;
   min-width: 0;
-  max-width: 48%;
+  max-width: 50%;
 }
 
 .pane-zoom,

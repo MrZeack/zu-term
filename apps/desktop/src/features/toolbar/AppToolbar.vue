@@ -57,6 +57,22 @@ const emit = defineEmits<{
       @delete="(id) => emit('deleteWorkspace', id)"
       @open="emit('openWorkspaceMenu')"
     />
+    <nav class="toolbar-actions" aria-label="Acciones de split">
+      <button
+        v-for="action in splitActions"
+        :key="action.id"
+        class="toolbar-action"
+        type="button"
+        :aria-label="`${action.label} · ${action.shortcut}`"
+        :title="`${action.label} · ${action.shortcut}`"
+        @click="emit('runSplitAction', action.id)"
+      >
+        <span class="split-icon" :class="`split-icon--${action.direction}`" aria-hidden="true" />
+        <span class="toolbar-action__label">{{
+          action.direction === 'right' ? 'Derecha' : 'Abajo'
+        }}</span>
+      </button>
+    </nav>
     <div class="toolbar-spacer" />
     <FontMenu
       :model-value="fontFamily"
@@ -90,22 +106,6 @@ const emit = defineEmits<{
         <span aria-hidden="true">+</span>
       </button>
     </div>
-    <nav class="toolbar-actions" aria-label="Acciones de split">
-      <button
-        v-for="action in splitActions"
-        :key="action.id"
-        class="toolbar-action"
-        type="button"
-        :aria-label="`${action.label} · ${action.shortcut}`"
-        :title="`${action.label} · ${action.shortcut}`"
-        @click="emit('runSplitAction', action.id)"
-      >
-        <span class="split-icon" :class="`split-icon--${action.direction}`" aria-hidden="true" />
-        <span class="toolbar-action__label">{{
-          action.direction === 'right' ? 'Derecha' : 'Abajo'
-        }}</span>
-      </button>
-    </nav>
     <button
       class="theme-toggle"
       type="button"
