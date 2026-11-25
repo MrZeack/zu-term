@@ -17,3 +17,9 @@ auditConfig:
     # picomatch <=4.0.7 (ReDoS): only typescript-eslint / tinyglobby uses it at
     # dev time, and it is not shipped. No patched version exists yet.
     - GHSA-fc5q-39xc-vjpf
+
+patchedDependencies:
+  # Backport of xterm.js WebGL shared-atlas fixes (2b982bc3, #6042, #6055 and
+  # monotonic page versions): splits sharing the glyph atlas showed garbled
+  # text after long use. Remove when a stable addon-webgl ships them (0.20).
+  '@xterm/addon-webgl@0.19.0': patches/@xterm__addon-webgl@0.19.0.patch
