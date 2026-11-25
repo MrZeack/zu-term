@@ -7,6 +7,8 @@ use super::registry::{PtyEvent, PtyRegistry};
 #[cfg(unix)]
 use super::shell_integration;
 use crate::config::{AppPaths, history_file_for_shell, valid_history_id};
+use crate::telemetry;
+use crate::workspace_store::ConfigStore;
 
 /// The user's login shell, started in `cwd`, with bundled integration for zsh,
 /// bash and fish. `ZU_TERM_TERMINAL` tells shells they run here.
@@ -14,6 +16,7 @@ fn shell_command(
     paths: &AppPaths,
     cwd: Option<&str>,
     history_id: Option<&str>,
+    block_telemetry: bool,
 ) -> Result<CommandBuilder, String> {
     let mut command = CommandBuilder::new_default_prog();
     let shell = command.get_shell();
@@ -24,6 +27,9 @@ fn shell_command(
     command.env("COLORTERM", "truecolor");
     command.env("TERM_PROGRAM", "zu-term");
     command.env("ZU_TERM_TERMINAL", "1");
+    if block_telemetry {
+        telemetry::apply(&mut command);
+    }
     if let Some(id) = history_id {
         if !valid_history_id(id) {
             return Err("invalid history id".into());
@@ -48,6 +54,7 @@ pub async fn pty_spawn(
     window: WebviewWindow,
     registry: State<'_, PtyRegistry>,
     paths: State<'_, AppPaths>,
+    store: State<'_, ConfigStore>,
     cwd: Option<String>,
     history_id: Option<String>,
     cols: u16,
@@ -56,7 +63,7 @@ pub async fn pty_spawn(
 ) -> Result<u32, String> {
     registry.spawn(
         window.label(),
-        shell_command(&paths, cwd.as_deref(), history_id.as_deref())?,
+        shell_command(&paths, cwd.as_deref(), history_id.as_deref(), store.blocks_telemetry())?,
         cols,
         rows,
         move |event| {

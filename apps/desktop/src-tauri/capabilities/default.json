@@ -7,6 +7,7 @@
     "allow-config-read",
     "allow-config-import",
     "allow-settings-save",
+    "allow-telemetry-block-set",
     "allow-workspace-save",
     "allow-workspace-delete",
     "allow-workspace-lock-acquire",

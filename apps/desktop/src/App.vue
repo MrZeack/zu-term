@@ -7,7 +7,11 @@ import { ask } from '@tauri-apps/plugin-dialog';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useErrorStore, useLayoutStore, useWorkspaceOperationStore } from './core/app-stores.ts';
 import { UI_DENSITY } from './core/ui-density.ts';
-import { configClient, WORKSPACES_UPDATED_EVENT } from './features/config/config-client.ts';
+import {
+  configClient,
+  TELEMETRY_CHANGED_EVENT,
+  WORKSPACES_UPDATED_EVENT,
+} from './features/config/config-client.ts';
 import { createConfigFile, parseConfigFile } from './features/config/config.ts';
 import { paneMenuItems } from './features/context-menu/menu-items.ts';
 import { showPaneMenu } from './features/context-menu/pane-menu.ts';
@@ -82,6 +86,7 @@ const ready = ref(false);
 const theme = ref<ThemeName>('cyan');
 const fontFamily = ref<TerminalFontId>(DEFAULT_TERMINAL_FONT_ID);
 const fontSize = ref<number>(DEFAULT_TERMINAL_FONT_SIZE);
+const blockTelemetry = ref(false);
 const closePromptVisible = ref(false);
 const closeActiveItems = ref<string[]>([]);
 const workspaceCatalog = ref<WorkspaceCatalog>(createWorkspaceCatalog());
@@ -228,6 +233,7 @@ let allowWindowClose = false;
 let unlistenClose: (() => void) | undefined;
 let unlistenRequestClose: UnlistenFn | undefined;
 let unlistenWorkspaces: UnlistenFn | undefined;
+let unlistenTelemetry: UnlistenFn | undefined;
 
 const actions = createPaneActions({
   store,
@@ -415,6 +421,11 @@ async function setFontSize(next: number) {
   await persistSettings();
 }
 
+// Every window updates through TELEMETRY_CHANGED_EVENT.
+function toggleTelemetry() {
+  configClient.setTelemetryBlocked(!blockTelemetry.value).catch(report);
+}
+
 function increaseFontSize() {
   void setFontSize(fontSize.value + 1);
 }
@@ -523,6 +534,7 @@ onMounted(async () => {
     theme.value = config?.theme ?? loadTheme(window.localStorage);
     fontFamily.value = config?.fontFamily ?? DEFAULT_TERMINAL_FONT_ID;
     fontSize.value = config?.fontSize ?? DEFAULT_TERMINAL_FONT_SIZE;
+    blockTelemetry.value = config?.blockTelemetry ?? false;
     document.documentElement.dataset.theme = theme.value;
     home.value = homePath;
     localHost.value = hostname;
@@ -546,6 +558,9 @@ onMounted(async () => {
     try {
       unlistenWorkspaces = await tauriListen(WORKSPACES_UPDATED_EVENT, () => {
         void workspaces.reloadWorkspaces();
+      });
+      unlistenTelemetry = await tauriListen<boolean>(TELEMETRY_CHANGED_EVENT, (event) => {
+        blockTelemetry.value = event.payload === true;
       });
     } catch (error) {
       report(error);
@@ -583,6 +598,7 @@ onBeforeUnmount(() => {
   unlistenClose?.();
   unlistenRequestClose?.();
   unlistenWorkspaces?.();
+  unlistenTelemetry?.();
 });
 </script>
 
@@ -641,7 +657,9 @@ onBeforeUnmount(() => {
       :run-processes="runProcesses"
       :home="home"
       :error-count="errorStore.errorCount"
+      :telemetry-blocked="blockTelemetry"
       @toggle-errors="errorStore.toggleVisible"
+      @toggle-telemetry="toggleTelemetry"
     />
     <CloseConfirmDialog
       :visible="closePromptVisible"

@@ -94,6 +94,8 @@ test('el nombre del agente en el split es verde con ID de sesión y amarillo sin
   assert.match(header, /class="command-badge"\s+:class="agentTone && `agent-\$\{agentTone\}`"/);
   assert.match(header, /\.command-badge\.agent-with-id \{\s*color: var\(--agent-with-id\);/);
   assert.match(header, /\.command-badge\.agent-without-id \{\s*color: var\(--agent-without-id\);/);
-  assert.match(css, /--agent-with-id: #[0-9a-f]{6};/);
-  assert.match(css, /--agent-without-id: #[0-9a-f]{6};/);
+  assert.match(css, /--ok: #[0-9a-f]{6};/);
+  assert.match(css, /--agent-with-id: var\(--ok\);/);
+  assert.match(css, /--warning: #[0-9a-f]{6};/);
+  assert.match(css, /--agent-without-id: var\(--warning\);/);
 });

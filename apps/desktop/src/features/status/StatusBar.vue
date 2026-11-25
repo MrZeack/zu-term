@@ -9,6 +9,7 @@ import {
 import {
   agentStatusLabel,
   formatTerminalSize,
+  telemetryIndicator,
   workspaceStatusLabel,
   type StatusPane,
 } from './status.ts';
@@ -21,10 +22,12 @@ const props = defineProps<{
   runProcesses?: RunProcessInfo[] | undefined;
   home?: string | undefined;
   errorCount?: number | undefined;
+  telemetryBlocked?: boolean;
 }>();
 
 const emit = defineEmits<{
   toggleErrors: [];
+  toggleTelemetry: [];
 }>();
 
 const densityStyle = {
@@ -32,6 +35,7 @@ const densityStyle = {
   '--status-bar-font-size': `${UI_DENSITY.statusBarFontSize}px`,
 };
 
+const telemetry = computed(() => telemetryIndicator(props.telemetryBlocked ?? false));
 const runLabel = computed(() => formatRunProcessesSummary(props.runProcesses ?? []));
 const runTooltip = computed(() => formatRunProcessesTooltip(props.runProcesses ?? [], props.home));
 const statusBranchDiff = computed(() => formatGitStatus(props.pane?.gitStatus));
@@ -83,6 +87,17 @@ const statusBranchTooltip = computed(() => {
           <strong class="status-run-label">{{ runLabel }}</strong>
         </span>
       </template>
+      <span class="status-divider" aria-hidden="true" />
+      <button
+        class="status-item status-telemetry"
+        :class="telemetry.tone"
+        type="button"
+        :title="telemetry.tooltip"
+        :aria-pressed="props.telemetryBlocked"
+        @click="emit('toggleTelemetry')"
+      >
+        {{ telemetry.label }}
+      </button>
       <span class="status-item status-size">
         {{ formatTerminalSize(props.pane?.cols, props.pane?.rows) }}
       </span>
@@ -277,6 +292,26 @@ const statusBranchTooltip = computed(() => {
   min-width: 58px;
   color: var(--muted);
   text-align: right;
+}
+
+.status-telemetry {
+  padding: 1px 6px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  background: transparent;
+  font-family: Menlo, monospace;
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.status-telemetry.warning {
+  color: var(--warning);
+}
+
+.status-telemetry.ok {
+  color: var(--ok);
+  border-color: transparent;
 }
 
 .status-error {

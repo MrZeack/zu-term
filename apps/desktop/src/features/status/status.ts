@@ -31,6 +31,29 @@ export function agentStatusLabel(agent: AgentState | undefined): string | undefi
   return `${AGENT_LABELS[agent.provider]} · ${agent.sessionId ? 'resume' : 'nueva'}`;
 }
 
+export interface TelemetryIndicator {
+  tone: 'warning' | 'ok';
+  label: string;
+  tooltip: string;
+}
+
+// The opt-out variables reach a shell only when it starts.
+export function telemetryIndicator(blocked: boolean): TelemetryIndicator {
+  return blocked
+    ? {
+        tone: 'ok',
+        label: 'SIN TELEMETRÍA',
+        tooltip:
+          'Los splits nuevos llevan variables para no enviar telemetría (DO_NOT_TRACK y otras). Los splits abiertos antes conservan su entorno. Clic para desactivarlo.',
+      }
+    : {
+        tone: 'warning',
+        label: 'TELEMETRÍA',
+        tooltip:
+          'Las herramientas de la terminal pueden enviar telemetría. Clic para bloquearla en los splits nuevos de todas las ventanas.',
+      };
+}
+
 export function formatTerminalSize(cols: number | undefined, rows: number | undefined): string {
   const validSize = (value: number | undefined): value is number =>
     typeof value === 'number' && Number.isInteger(value) && value > 0;

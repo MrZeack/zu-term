@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
-import { agentStatusLabel, formatTerminalSize, workspaceStatusLabel } from './status.ts';
+import {
+  agentStatusLabel,
+  formatTerminalSize,
+  telemetryIndicator,
+  workspaceStatusLabel,
+} from './status.ts';
 
 test('formatea los datos compactos de la barra de estado', () => {
   assert.equal(workspaceStatusLabel('  Proyecto  '), 'Proyecto');
@@ -34,4 +39,27 @@ test('monta la barra de estado debajo del layout y recibe el tamaño de la PTY',
   assert.match(statusSource, /runProcesses/);
   assert.match(statusSource, /status-error/);
   assert.match(statusSource, /props\.errorCount/);
+});
+
+test('avisa de la telemetría activa y permite bloquearla desde la barra de estado', async () => {
+  const active = telemetryIndicator(false);
+  assert.equal(active.tone, 'warning');
+  assert.equal(active.label, 'TELEMETRÍA');
+  assert.match(active.tooltip, /Clic para bloquearla/);
+  assert.match(active.tooltip, /splits nuevos/);
+
+  const blocked = telemetryIndicator(true);
+  assert.equal(blocked.tone, 'ok');
+  assert.equal(blocked.label, 'SIN TELEMETRÍA');
+  assert.match(blocked.tooltip, /splits abiertos antes/);
+
+  const statusSource = await readFile(new URL('./StatusBar.vue', import.meta.url), 'utf8');
+  const appSource = await readFile(new URL('../../App.vue', import.meta.url), 'utf8');
+  assert.match(statusSource, /class="status-item status-telemetry"/);
+  assert.match(statusSource, /@click="emit\('toggleTelemetry'\)"/);
+  assert.match(statusSource, /\.status-telemetry\.warning \{[^}]*var\(--warning\)/);
+  assert.match(statusSource, /\.status-telemetry\.ok \{[^}]*var\(--ok\)/);
+  assert.match(appSource, /:telemetry-blocked="blockTelemetry"/);
+  assert.match(appSource, /@toggle-telemetry="toggleTelemetry"/);
+  assert.match(appSource, /TELEMETRY_CHANGED_EVENT/);
 });

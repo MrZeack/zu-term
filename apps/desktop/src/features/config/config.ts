@@ -38,6 +38,7 @@ export function parseConfigFile(raw: string | null): {
   catalog: WorkspaceCatalog;
   fontFamily: TerminalFontId;
   fontSize: number;
+  blockTelemetry: boolean;
 } | null {
   if (!raw) return null;
   try {
@@ -62,6 +63,7 @@ export function parseConfigFile(raw: string | null): {
       catalog,
       fontFamily,
       fontSize,
+      blockTelemetry: record.blockTelemetry === true,
     };
   } catch {
     return null;

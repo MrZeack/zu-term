@@ -108,6 +108,10 @@ Si `~/.zshrc` lanza otra shell mediante un wrapper (p. ej. `kiro-cli-term`), esa
 
 Comprueba que funciona con `cd /tmp` seguido de un split: el nuevo split debe iniciar en `/tmp`.
 
+### Telemetría
+
+`TELEMETRÍA` en amarillo en la barra de estado avisa que las herramientas de la terminal pueden enviar telemetría; un clic la bloquea (se guarda en `config.json` y aplica a todas las ventanas). Desde entonces cada split nuevo arranca con las variables de exclusión de [`telemetry.rs`](apps/desktop/src-tauri/src/telemetry.rs) (`DO_NOT_TRACK`, Claude Code, Homebrew, Next.js, Vercel, .NET, etc.); los splits ya abiertos conservan su entorno y tus dotfiles pueden sobrescribirlas.
+
 ## Seguridad
 
 - La UI solo tiene los permisos que invoca, incluidos los comandos propios declarados en `build.rs` ([capabilities](apps/desktop/src-tauri/capabilities/default.json)); CSP sin orígenes externos.

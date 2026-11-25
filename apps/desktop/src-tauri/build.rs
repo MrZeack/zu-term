@@ -3,6 +3,7 @@ const COMMANDS: &[&str] = &[
     "config_read",
     "config_import",
     "settings_save",
+    "telemetry_block_set",
     "workspace_save",
     "workspace_delete",
     "workspace_lock_acquire",

@@ -7,6 +7,7 @@ mod host;
 mod links;
 mod pty;
 mod run_processes;
+mod telemetry;
 mod workspace_lock;
 mod workspace_store;
 
@@ -44,6 +45,7 @@ pub fn run() {
             config::config_read,
             workspace_store::config_import,
             workspace_store::settings_save,
+            telemetry::telemetry_block_set,
             workspace_store::workspace_save,
             workspace_store::workspace_delete,
             workspace_lock::workspace_lock_acquire,

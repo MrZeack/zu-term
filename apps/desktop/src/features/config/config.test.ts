@@ -13,6 +13,7 @@ test('serializa tema, catálogo y opciones de tipografía en el archivo de confi
     catalog,
     fontFamily: 'fira-code',
     fontSize: 14,
+    blockTelemetry: false,
   });
 });
 
@@ -26,6 +27,7 @@ test('acepta configuraciones heredadas asignando fuente y tamaño por defecto', 
     catalog,
     fontFamily: 'jetbrains-mono',
     fontSize: 12,
+    blockTelemetry: false,
   });
 });
 
@@ -45,6 +47,7 @@ test('sanea fuentes desconocidas y tamaños de fuente fuera de rango', () => {
     catalog,
     fontFamily: 'jetbrains-mono',
     fontSize: 28,
+    blockTelemetry: false,
   });
 });
 
@@ -52,4 +55,20 @@ test('rechaza configuración corrupta o con una versión desconocida', () => {
   assert.equal(parseConfigFile('{"version":2}'), null);
   assert.equal(parseConfigFile('{"version":1,"theme":"mint"}'), null);
   assert.equal(parseConfigFile('not-json'), null);
+});
+
+test('lee si se bloquea la telemetría y solo acepta true', () => {
+  const catalog = createWorkspaceCatalog();
+  catalog.activeId = null;
+  const base = { version: 1, theme: 'cyan', workspaceCatalog: catalog };
+
+  assert.equal(
+    parseConfigFile(JSON.stringify({ ...base, blockTelemetry: true }))?.blockTelemetry,
+    true,
+  );
+  assert.equal(
+    parseConfigFile(JSON.stringify({ ...base, blockTelemetry: 'yes' }))?.blockTelemetry,
+    false,
+  );
+  assert.equal(parseConfigFile(JSON.stringify(base))?.blockTelemetry, false);
 });

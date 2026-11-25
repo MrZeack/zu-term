@@ -61,8 +61,10 @@
   --accent-alt-border: rgba(0, 202, 145, 0.42);
   --text: #e8f2f4;
   --muted: #82939d;
-  --agent-with-id: #4ade80;
-  --agent-without-id: #facc15;
+  --ok: #4ade80;
+  --warning: #facc15;
+  --agent-with-id: var(--ok);
+  --agent-without-id: var(--warning);
   color-scheme: dark;
 }
 

@@ -187,6 +187,23 @@ impl ConfigStore {
         })
     }
 
+    /// Whether new shells get the telemetry opt-out variables. Off when the
+    /// file is missing or unreadable.
+    pub fn blocks_telemetry(&self) -> bool {
+        self.locked(|| read_config_in(&self.directory))
+            .ok()
+            .flatten()
+            .and_then(|raw| parse_config(&raw))
+            .is_some_and(|config| config.get("blockTelemetry") == Some(&json!(true)))
+    }
+
+    pub fn set_block_telemetry(&self, enabled: bool) -> Result<bool, String> {
+        self.update(|config| {
+            config.insert("blockTelemetry".into(), json!(enabled));
+            Ok(true)
+        })
+    }
+
     pub fn save_workspace(
         &self,
         locks: &WorkspaceLocks,
@@ -457,6 +474,22 @@ mod tests {
             "the unreadable file is kept as a backup",
         );
         assert_eq!(f.store.save_workspace(&f.locks, "main", workspace("ws-1", "Uno")), Ok(true));
+    }
+
+    #[test]
+    fn telemetry_blocking_is_off_until_saved_and_keeps_other_settings() {
+        let f = Fixture::new("telemetry");
+        assert!(!f.store.blocks_telemetry());
+        f.store.save_settings("mint", "fira-code", 14).unwrap();
+
+        assert_eq!(f.store.set_block_telemetry(true), Ok(true));
+        assert!(f.store.blocks_telemetry());
+        assert_eq!(f.config()["theme"], json!("mint"));
+
+        f.store.save_settings("cyan", "fira-code", 14).unwrap();
+        assert!(f.store.blocks_telemetry(), "saving other settings keeps it");
+        f.store.set_block_telemetry(false).unwrap();
+        assert!(!f.store.blocks_telemetry());
     }
 
     #[test]
