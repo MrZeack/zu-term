@@ -12,6 +12,7 @@ const COMMANDS: &[&str] = &[
     "local_hostname",
     "initial_cwd",
     "git_branches_detect",
+    "git_diff",
     "open_link",
     "pty_spawn",
     "pty_write",

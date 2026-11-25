@@ -6,6 +6,9 @@ import { useLayoutStore } from '../../core/app-stores.ts';
 import PaneHeader from '../pane-header/PaneHeader.vue';
 import { paneTitle, shortPath } from '../pane-header/pane-title.ts';
 import TerminalPane from '../terminal/TerminalPane.vue';
+import GitDiffDialog from '../git/GitDiffDialog.vue';
+import { gitClient } from '../git/git-client.ts';
+import type { GitDiff } from '../git/git-diff.ts';
 import { agentSessionTone } from '../workspace/agent.ts';
 import { contextMenuPosition, type ContextMenuPosition } from '../context-menu/position.ts';
 import type { ThemeName } from '../theme/theme.ts';
@@ -37,6 +40,49 @@ const emit = defineEmits<{
 }>();
 
 const PATH_MAX = 60;
+
+// Diff of the folder of the split whose branch badge was clicked.
+const diffView = ref<{
+  cwd: string;
+  branch: string;
+  loading: boolean;
+  error?: string;
+  diff?: GitDiff;
+} | null>(null);
+let diffRequest = 0;
+
+function paneGitCwd(id: string): string {
+  return store.panes[id]?.cwd ?? store.panes[id]?.startCwd ?? '';
+}
+
+async function loadDiff() {
+  const view = diffView.value;
+  if (!view) return;
+  const request = ++diffRequest;
+  diffView.value = { cwd: view.cwd, branch: view.branch, loading: true };
+  try {
+    const diff = await gitClient.diff(view.cwd);
+    if (request === diffRequest && diffView.value)
+      diffView.value = { ...diffView.value, loading: false, diff };
+  } catch (error) {
+    if (request === diffRequest && diffView.value) {
+      diffView.value = { ...diffView.value, loading: false, error: String(error) };
+    }
+  }
+}
+
+function openDiff(id: string) {
+  const cwd = paneGitCwd(id);
+  const branch = props.gitBranches?.[cwd]?.branch;
+  if (!cwd || !branch) return;
+  diffView.value = { cwd, branch, loading: true };
+  void loadDiff();
+}
+
+function closeDiff() {
+  diffRequest += 1;
+  diffView.value = null;
+}
 const store = useLayoutStore();
 const container = useTemplateRef<HTMLDivElement>('container');
 const geometry = computed(() => computeGeometry(store.root));
@@ -234,6 +280,7 @@ const dropPreviewRect = computed<Rect | null>(() => {
         @rename="(name) => store.rename(id, name)"
         @toggle-zoom="store.toggleZoom(id)"
         @close="emit('close', id)"
+        @show-diff="openDiff(id)"
         @dragstart="startPaneDrag(id, $event)"
         @dragend="endPaneDrag"
       />
@@ -273,6 +320,16 @@ const dropPreviewRect = computed<Rect | null>(() => {
       class="drop-preview"
       :class="{ 'drop-center': dropTarget?.zone === 'center' }"
       :style="previewStyle(dropPreviewRect)"
+    />
+    <GitDiffDialog
+      :visible="diffView !== null"
+      :branch="diffView?.branch ?? ''"
+      :path="shortPath(diffView?.cwd, props.home, PATH_MAX)"
+      :loading="diffView?.loading ?? false"
+      :error="diffView?.error"
+      :diff="diffView?.diff"
+      @close="closeDiff"
+      @refresh="loadDiff"
     />
   </div>
 </template>

@@ -17,6 +17,7 @@
     "allow-initial-cwd",
     "allow-open-link",
     "allow-git-branches-detect",
+    "allow-git-diff",
     "allow-pty-spawn",
     "allow-pty-write",
     "allow-pty-resize",

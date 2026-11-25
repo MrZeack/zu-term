@@ -25,13 +25,26 @@ pub struct GitBranchInfo {
     pub status: Option<GitStatusSummary>,
 }
 
+/// Uncommitted changes of a repository: staged and unstaged against `HEAD`
+/// as a unified diff (capped), plus untracked file names.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitDiff {
+    pub diff: String,
+    pub truncated: bool,
+    pub untracked: Vec<String>,
+}
+
 pub const MAX_CWDS: usize = 64;
 const MAX_PATH_BYTES: usize = 4096;
 const MAX_GIT_FILE_BYTES: u64 = 1024;
 const MAX_HEAD_BYTES: u64 = 512;
 const MAX_BRANCH_NAME_BYTES: usize = 120;
-const MAX_GIT_STATUS_BYTES: u64 = 512 * 1024;
+const MAX_GIT_STATUS_BYTES: usize = 512 * 1024;
 const GIT_STATUS_TIMEOUT: Duration = Duration::from_secs(2);
+const MAX_GIT_DIFF_BYTES: usize = 2 * 1024 * 1024;
+const GIT_DIFF_TIMEOUT: Duration = Duration::from_secs(5);
+const MAX_UNTRACKED_FILES: usize = 500;
 const POLL_INTERVAL: Duration = Duration::from_millis(15);
 
 fn read_text_file(path: &Path, limit: u64) -> Option<String> {
@@ -126,17 +139,33 @@ fn kill_group(child: &mut std::process::Child) {
     let _ = child.wait();
 }
 
-fn run_command_with_timeout(mut command: Command, timeout: Duration) -> Option<String> {
+/// Runs `command` for at most `timeout` and returns its stdout when it
+/// succeeds: the first `limit` bytes and whether there was more. The rest is
+/// read and dropped so a long output never blocks the command.
+fn run_command_capped(
+    mut command: Command,
+    timeout: Duration,
+    limit: usize,
+) -> Option<(Vec<u8>, bool)> {
     #[cfg(unix)]
     std::os::unix::process::CommandExt::process_group(&mut command, 0);
     let mut child = command.stdout(Stdio::piped()).stderr(Stdio::null()).spawn().ok()?;
-    let stdout = child.stdout.take()?;
+    let mut stdout = child.stdout.take()?;
     // Drain stdout on a dedicated thread so a full pipe buffer never deadlocks
-    // while waiting for exit, capped so huge repos cannot grow memory unbounded.
+    // while waiting for exit; only `limit` bytes are kept.
     let reader = thread::spawn(move || {
-        let mut buf = Vec::new();
-        let _ = stdout.take(MAX_GIT_STATUS_BYTES).read_to_end(&mut buf);
-        buf
+        let mut kept = Vec::new();
+        let mut truncated = false;
+        let mut chunk = [0_u8; 16 * 1024];
+        while let Ok(read) = stdout.read(&mut chunk) {
+            if read == 0 {
+                break;
+            }
+            let room = limit - kept.len();
+            kept.extend_from_slice(&chunk[..read.min(room)]);
+            truncated |= read > room;
+        }
+        (kept, truncated)
     });
 
     let deadline = Instant::now() + timeout;
@@ -155,7 +184,11 @@ fn run_command_with_timeout(mut command: Command, timeout: Duration) -> Option<S
     if !status.success() {
         return None;
     }
-    let bytes = reader.join().ok()?;
+    reader.join().ok()
+}
+
+fn run_command_with_timeout(command: Command, timeout: Duration) -> Option<String> {
+    let (bytes, _) = run_command_capped(command, timeout, MAX_GIT_STATUS_BYTES)?;
     Some(String::from_utf8_lossy(&bytes).into_owned())
 }
 
@@ -200,6 +233,85 @@ pub fn detect_git_branches_for_cwds(cwds: &[String]) -> Vec<GitBranchInfo> {
         }
     }
     results
+}
+
+/// git in `root` without running anything the repository configures: no
+/// external diff or textconv tools and no fsmonitor hook.
+fn safe_git(root: &Path, args: &[&str]) -> Command {
+    let mut command = Command::new("git");
+    command
+        .args(["-c", "core.fsmonitor=false", "-c", "core.quotepath=off"])
+        .args(args)
+        .current_dir(root)
+        .env("GIT_OPTIONAL_LOCKS", "0")
+        .env("LC_ALL", "C");
+    command
+}
+
+const DIFF_ARGS: [&str; 5] = ["diff", "--no-color", "--no-ext-diff", "--no-textconv", "-M"];
+
+fn diff_output(root: &Path, extra: &[&str], limit: usize) -> Result<(Vec<u8>, bool), String> {
+    let args: Vec<&str> = DIFF_ARGS.iter().chain(extra).copied().collect();
+    run_command_capped(safe_git(root, &args), GIT_DIFF_TIMEOUT, limit)
+        .ok_or_else(|| "git diff no respondió".to_string())
+}
+
+pub fn git_diff_in(root: &Path) -> Result<GitDiff, String> {
+    let has_head = run_command_capped(
+        safe_git(root, &["rev-parse", "--verify", "-q", "HEAD"]),
+        GIT_DIFF_TIMEOUT,
+        64,
+    )
+    .is_some();
+    let (mut bytes, mut truncated) = if has_head {
+        diff_output(root, &["HEAD"], MAX_GIT_DIFF_BYTES)?
+    } else {
+        // Before the first commit: what is staged, then what is not.
+        diff_output(root, &["--cached"], MAX_GIT_DIFF_BYTES)?
+    };
+    if !has_head && !truncated {
+        let (rest, rest_truncated) = diff_output(root, &[], MAX_GIT_DIFF_BYTES - bytes.len())?;
+        bytes.extend(rest);
+        truncated = rest_truncated;
+    }
+
+    let untracked = run_command_capped(
+        safe_git(root, &["ls-files", "--others", "--exclude-standard", "-z"]),
+        GIT_DIFF_TIMEOUT,
+        MAX_GIT_STATUS_BYTES,
+    )
+    .map(|(names, _)| {
+        names
+            .split(|byte| *byte == 0)
+            .filter(|name| !name.is_empty())
+            .take(MAX_UNTRACKED_FILES)
+            .map(|name| String::from_utf8_lossy(name).into_owned())
+            .collect()
+    })
+    .unwrap_or_default();
+
+    Ok(GitDiff { diff: String::from_utf8_lossy(&bytes).into_owned(), truncated, untracked })
+}
+
+/// Same folders the branch badge accepts: an absolute path that directly
+/// holds a repository.
+pub fn git_diff_for(cwd: &str) -> Result<GitDiff, String> {
+    let trimmed = cwd.trim();
+    let path = Path::new(trimmed);
+    if trimmed.is_empty() || trimmed.len() > MAX_PATH_BYTES || !path.is_absolute() {
+        return Err("carpeta no válida".into());
+    }
+    if detect_git_branch(path).is_none() {
+        return Err("la carpeta no es la raíz de un repositorio git".into());
+    }
+    git_diff_in(path)
+}
+
+#[tauri::command]
+pub async fn git_diff(cwd: String) -> Result<GitDiff, String> {
+    tauri::async_runtime::spawn_blocking(move || git_diff_for(&cwd))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 // Offload blocking filesystem/subprocess work onto Tokio's blocking pool.
@@ -365,5 +477,96 @@ UU conflict.txt
         fast.args(["-c", "printf 'ok'"]);
         let ok = run_command_with_timeout(fast, std::time::Duration::from_secs(2));
         assert_eq!(ok.as_deref(), Some("ok"));
+    }
+    fn git(dir: &Path, args: &[&str]) {
+        let status = Command::new("git")
+            .args(["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"])
+            .args(args)
+            .current_dir(dir)
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .expect("git");
+        assert!(status.success(), "git {args:?}");
+    }
+
+    fn repo(label: &str) -> PathBuf {
+        let root = temp_test_dir(label);
+        git(&root, &["init", "-q"]);
+        root
+    }
+
+    #[test]
+    fn diff_shows_changes_against_head_and_lists_untracked_files() {
+        let root = repo("diff");
+        fs::write(root.join("a.txt"), "old\n").unwrap();
+        git(&root, &["add", "a.txt"]);
+        git(&root, &["commit", "-qm", "init"]);
+        fs::write(root.join("a.txt"), "new\n").unwrap();
+        fs::write(root.join("staged.txt"), "staged\n").unwrap();
+        git(&root, &["add", "staged.txt"]);
+        fs::write(root.join("b.txt"), "untracked\n").unwrap();
+
+        let diff = git_diff_in(&root).expect("diff");
+        assert!(diff.diff.contains("-old"), "{}", diff.diff);
+        assert!(diff.diff.contains("+new"));
+        assert!(diff.diff.contains("+staged"), "staged changes are included");
+        assert_eq!(diff.untracked, vec!["b.txt".to_string()]);
+        assert!(!diff.truncated);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn diff_works_before_the_first_commit() {
+        let root = repo("diff-unborn");
+        fs::write(root.join("a.txt"), "first\n").unwrap();
+        git(&root, &["add", "a.txt"]);
+
+        let diff = git_diff_in(&root).expect("diff");
+        assert!(diff.diff.contains("+first"), "{}", diff.diff);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn diff_never_runs_tools_configured_by_the_repository() {
+        let root = repo("diff-hostile");
+        fs::write(root.join("a.txt"), "old\n").unwrap();
+        git(&root, &["add", "a.txt"]);
+        git(&root, &["commit", "-qm", "init"]);
+        let marker = root.join("ran");
+        let tool = format!("touch {}", marker.display());
+        git(&root, &["config", "diff.external", &tool]);
+        git(&root, &["config", "diff.hostile.textconv", &tool]);
+        git(&root, &["config", "core.fsmonitor", &tool]);
+        fs::write(root.join(".gitattributes"), "*.txt diff=hostile\n").unwrap();
+        fs::write(root.join("a.txt"), "new\n").unwrap();
+
+        let diff = git_diff_in(&root).expect("diff");
+        assert!(diff.diff.contains("+new"));
+        assert!(!marker.exists(), "a repository setting ran a command");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn diff_only_accepts_the_root_of_a_repository() {
+        let root = repo("diff-root");
+        let nested = root.join("sub");
+        fs::create_dir_all(&nested).unwrap();
+
+        assert!(git_diff_for("relative/path").is_err());
+        assert!(git_diff_for(nested.to_str().unwrap()).is_err(), "like the branch badge");
+        assert!(git_diff_for(root.to_str().unwrap()).is_ok());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn capped_command_output_reports_truncation_without_timing_out() {
+        let mut big = Command::new("sh");
+        big.args(["-c", "head -c 200000 /dev/zero"]);
+        let (bytes, truncated) =
+            run_command_capped(big, Duration::from_secs(5), 100).expect("finishes");
+        assert_eq!(bytes.len(), 100);
+        assert!(truncated);
     }
 }

@@ -27,6 +27,7 @@ const emit = defineEmits<{
   close: [];
   dragstart: [event: DragEvent];
   dragend: [];
+  showDiff: [];
 }>();
 
 const draft = ref('');
@@ -108,11 +109,19 @@ const commit = () => emit('rename', draft.value);
         <span class="attention-dot" aria-hidden="true" />
         {{ attentionLabel }}
       </span>
-      <span v-if="branch" class="branch-badge" :title="branchTooltip">
+      <button
+        v-if="branch"
+        class="branch-badge"
+        type="button"
+        :title="`${branchTooltip} · Clic para ver el diff`"
+        draggable="false"
+        @dblclick.stop
+        @click.stop="emit('showDiff')"
+      >
         <span class="branch-icon" aria-hidden="true">⎇</span>
         <span class="branch-name">{{ branch }}</span>
         <span v-if="gitStatusText" class="branch-status">{{ gitStatusText }}</span>
-      </span>
+      </button>
     </div>
     <button
       v-if="canZoom || zoomed"
@@ -255,6 +264,18 @@ const commit = () => emit('rename', draft.value);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  cursor: pointer;
+}
+
+.branch-badge:hover,
+.branch-badge:focus-visible {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.branch-badge:focus-visible {
+  outline: 2px solid var(--accent-alt);
+  outline-offset: 1px;
 }
 
 .branch-icon {

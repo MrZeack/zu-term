@@ -55,6 +55,7 @@ pub fn run() {
             host::initial_cwd,
             links::open_link,
             git::git_branches_detect,
+            git::git_diff,
             pty::commands::pty_spawn,
             pty::commands::pty_write,
             pty::commands::pty_resize,
