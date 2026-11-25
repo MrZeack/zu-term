@@ -23,3 +23,44 @@ export function createWebglBudget(max = MAX_WEBGL_TERMINALS) {
 }
 
 export const webglBudget = createWebglBudget();
+
+interface Disposable {
+  dispose(): void;
+}
+
+export interface AtlasRenderer {
+  clearTextureAtlas(): void;
+  onRemoveTextureAtlasCanvas(listener: () => void): Disposable;
+}
+
+// Panes with the same font and theme share one glyph atlas. When it fills up,
+// xterm 6.0 merges its pages and only the pane that merged redraws; the others
+// keep stale glyph positions (garbled text, xterm.js #6042, fixed only in
+// betas). Rebuilding every pane's glyphs after a merge avoids that.
+export function createAtlasSync(schedule: FrameScheduler) {
+  const renderers = new Set<AtlasRenderer>();
+  let pending = false;
+  const rebuild = () => {
+    pending = false;
+    for (const renderer of renderers) renderer.clearTextureAtlas();
+  };
+  const request = () => {
+    if (pending) return;
+    pending = true;
+    schedule(rebuild);
+  };
+  return {
+    register(renderer: AtlasRenderer): Disposable {
+      renderers.add(renderer);
+      const subscription = renderer.onRemoveTextureAtlasCanvas(request);
+      return {
+        dispose() {
+          subscription.dispose();
+          renderers.delete(renderer);
+        },
+      };
+    },
+  };
+}
+
+export const webglAtlasSync = createAtlasSync((callback) => window.requestAnimationFrame(callback));

@@ -16,7 +16,7 @@ import { coalesce, debounce } from './resize-scheduler.ts';
 import { terminals } from './terminal-registry.ts';
 import { runTerminalSearch } from './terminal-search.ts';
 import TerminalSearchBar from './TerminalSearchBar.vue';
-import { deferUntilNextFrame, webglBudget } from './webgl-startup.ts';
+import { deferUntilNextFrame, webglAtlasSync, webglBudget } from './webgl-startup.ts';
 import { THEME_CHANGE_EVENT, terminalTheme, type ThemeName } from '../theme/theme.ts';
 
 const props = defineProps<{
@@ -121,11 +121,14 @@ let searchResultsDisposable: { dispose(): void } | undefined;
 let observer: ResizeObserver | undefined;
 let webgl: WebglAddon | undefined;
 let holdsWebglSlot = false;
+let atlasRegistration: { dispose(): void } | undefined;
 
 // Disposing the addon makes xterm fall back to its DOM renderer.
 function dropWebgl() {
   if (holdsWebglSlot) webglBudget.release();
   holdsWebglSlot = false;
+  atlasRegistration?.dispose();
+  atlasRegistration = undefined;
   const addon = webgl;
   webgl = undefined;
   addon?.dispose();
@@ -173,6 +176,7 @@ onMounted(async () => {
             webgl = new WebglAddon();
             webgl.onContextLoss(dropWebgl);
             term.loadAddon(webgl);
+            atlasRegistration = webglAtlasSync.register(webgl);
           } catch {
             // WebGL unavailable: xterm keeps its DOM renderer.
             dropWebgl();
