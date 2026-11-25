@@ -18,6 +18,8 @@
     "allow-open-link",
     "allow-git-branches-detect",
     "allow-git-diff",
+    "allow-git-log",
+    "allow-git-show",
     "allow-pty-spawn",
     "allow-pty-write",
     "allow-pty-resize",

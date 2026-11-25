@@ -8,7 +8,7 @@ import { paneTitle, shortPath } from '../pane-header/pane-title.ts';
 import TerminalPane from '../terminal/TerminalPane.vue';
 import GitDiffDialog from '../git/GitDiffDialog.vue';
 import { gitClient } from '../git/git-client.ts';
-import type { GitDiff } from '../git/git-diff.ts';
+import { createGitView } from '../git/git-view.ts';
 import { agentSessionTone } from '../workspace/agent.ts';
 import { contextMenuPosition, type ContextMenuPosition } from '../context-menu/position.ts';
 import type { ThemeName } from '../theme/theme.ts';
@@ -41,47 +41,14 @@ const emit = defineEmits<{
 
 const PATH_MAX = 60;
 
-// Diff of the folder of the split whose branch badge was clicked.
-const diffView = ref<{
-  cwd: string;
-  branch: string;
-  loading: boolean;
-  error?: string;
-  diff?: GitDiff;
-} | null>(null);
-let diffRequest = 0;
-
-function paneGitCwd(id: string): string {
-  return store.panes[id]?.cwd ?? store.panes[id]?.startCwd ?? '';
-}
-
-async function loadDiff() {
-  const view = diffView.value;
-  if (!view) return;
-  const request = ++diffRequest;
-  diffView.value = { cwd: view.cwd, branch: view.branch, loading: true };
-  try {
-    const diff = await gitClient.diff(view.cwd);
-    if (request === diffRequest && diffView.value)
-      diffView.value = { ...diffView.value, loading: false, diff };
-  } catch (error) {
-    if (request === diffRequest && diffView.value) {
-      diffView.value = { ...diffView.value, loading: false, error: String(error) };
-    }
-  }
-}
+// Git view (changes and history) of the folder of the split whose branch
+// badge was clicked.
+const git = createGitView(gitClient);
 
 function openDiff(id: string) {
-  const cwd = paneGitCwd(id);
+  const cwd = store.panes[id]?.cwd ?? store.panes[id]?.startCwd ?? '';
   const branch = props.gitBranches?.[cwd]?.branch;
-  if (!cwd || !branch) return;
-  diffView.value = { cwd, branch, loading: true };
-  void loadDiff();
-}
-
-function closeDiff() {
-  diffRequest += 1;
-  diffView.value = null;
+  if (cwd && branch) git.open(cwd, branch);
 }
 const store = useLayoutStore();
 const container = useTemplateRef<HTMLDivElement>('container');
@@ -322,14 +289,13 @@ const dropPreviewRect = computed<Rect | null>(() => {
       :style="previewStyle(dropPreviewRect)"
     />
     <GitDiffDialog
-      :visible="diffView !== null"
-      :branch="diffView?.branch ?? ''"
-      :path="shortPath(diffView?.cwd, props.home, PATH_MAX)"
-      :loading="diffView?.loading ?? false"
-      :error="diffView?.error"
-      :diff="diffView?.diff"
-      @close="closeDiff"
-      @refresh="loadDiff"
+      :view="git.state"
+      :path="shortPath(git.state.cwd, props.home, PATH_MAX)"
+      @close="git.close"
+      @refresh="git.refresh"
+      @tab="git.setTab"
+      @select="git.select"
+      @load-more="git.loadMore"
     />
   </div>
 </template>

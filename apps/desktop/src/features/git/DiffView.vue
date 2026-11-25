@@ -1,0 +1,238 @@
+<script setup lang="ts">
+import { useTemplateRef } from 'vue';
+import type { DiffFile } from './git-diff.ts';
+
+defineProps<{
+  files: DiffFile[];
+  untracked?: string[] | undefined;
+  truncated?: boolean | undefined;
+}>();
+
+const body = useTemplateRef<HTMLElement>('body');
+
+const STATUS_LABELS: Record<DiffFile['status'], string> = {
+  added: 'A',
+  deleted: 'D',
+  modified: 'M',
+  renamed: 'R',
+};
+
+function showFile(index: number) {
+  body.value
+    ?.querySelector(`[data-file="${index}"]`)
+    ?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+}
+</script>
+
+<template>
+  <div class="diff-content">
+    <nav class="diff-files" aria-label="Archivos con cambios">
+      <button
+        v-for="(file, index) in files"
+        :key="`${index}-${file.path}`"
+        class="diff-file-link"
+        type="button"
+        :title="file.oldPath ? `${file.oldPath} → ${file.path}` : file.path"
+        @click="showFile(index)"
+      >
+        <span class="file-status" :class="file.status">{{ STATUS_LABELS[file.status] }}</span>
+        <span class="file-name">{{ file.path }}</span>
+        <span class="file-counts">
+          <b v-if="file.additions" class="add">+{{ file.additions }}</b>
+          <b v-if="file.deletions" class="del">−{{ file.deletions }}</b>
+        </span>
+      </button>
+      <template v-if="untracked?.length">
+        <span class="diff-files-title">Sin seguimiento</span>
+        <span v-for="name in untracked" :key="name" class="diff-file-link untracked" :title="name">
+          <span class="file-status added">?</span>
+          <span class="file-name">{{ name }}</span>
+        </span>
+      </template>
+    </nav>
+    <div ref="body" class="diff-body">
+      <slot />
+      <p v-if="truncated" class="diff-truncated">
+        El diff es muy grande: se muestran solo los primeros 2 MB.
+      </p>
+      <section v-for="(file, index) in files" :key="`${index}-${file.path}`" :data-file="index">
+        <h3 class="diff-file-title">
+          <span v-if="file.oldPath">{{ file.oldPath }} → </span>{{ file.path }}
+        </h3>
+        <div class="diff-lines">
+          <code
+            v-for="(line, lineIndex) in file.lines"
+            :key="lineIndex"
+            class="diff-line"
+            :class="line.kind"
+            >{{ line.text || ' ' }}</code
+          >
+        </div>
+        <p v-if="file.lines.length === 0" class="diff-note">Sin cambios de contenido.</p>
+      </section>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.diff-content {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.diff-files {
+  display: flex;
+  flex: 0 0 240px;
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px;
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+
+.diff-files-title {
+  margin: 10px 6px 4px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.diff-file-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 6px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text);
+  background: transparent;
+  cursor: pointer;
+  font-family: Menlo, monospace;
+  font-size: 11px;
+  text-align: left;
+}
+
+.diff-file-link:hover,
+.diff-file-link:focus-visible {
+  background: var(--accent-soft);
+}
+
+.diff-file-link.untracked {
+  color: var(--muted);
+  cursor: default;
+}
+
+.diff-file-link.untracked:hover {
+  background: transparent;
+}
+
+.file-status {
+  flex: 0 0 auto;
+  width: 14px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.file-status.added,
+.add {
+  color: var(--ok);
+}
+
+.file-status.deleted,
+.del {
+  color: var(--danger, #ff8c8c);
+}
+
+.file-status.modified {
+  color: var(--warning);
+}
+
+.file-status.renamed {
+  color: var(--accent);
+}
+
+.file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  direction: rtl;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-counts {
+  display: inline-flex;
+  gap: 4px;
+  font-size: 10px;
+}
+
+.diff-body {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+}
+
+.diff-truncated {
+  margin: 0;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--warning);
+  font-size: 12px;
+}
+
+.diff-file-title {
+  position: sticky;
+  top: 0;
+  margin: 0;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--header-bg);
+  font-family: Menlo, monospace;
+  font-size: 12px;
+}
+
+.diff-lines {
+  padding: 4px 0 12px;
+  background: var(--pane-bg);
+  font-family: Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.diff-line {
+  display: block;
+  padding: 0 14px;
+  font-family: inherit;
+  white-space: pre;
+}
+
+.diff-line.add {
+  background: rgba(74, 222, 128, 0.1);
+}
+
+.diff-line.del {
+  background: rgba(255, 140, 140, 0.1);
+}
+
+.diff-line.hunk {
+  margin-top: 6px;
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.diff-line.meta {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.diff-note {
+  margin: 0;
+  padding: 8px 14px 14px;
+  color: var(--muted);
+  font-size: 12px;
+}
+</style>

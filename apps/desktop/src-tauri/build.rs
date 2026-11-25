@@ -13,6 +13,8 @@ const COMMANDS: &[&str] = &[
     "initial_cwd",
     "git_branches_detect",
     "git_diff",
+    "git_log",
+    "git_show",
     "open_link",
     "pty_spawn",
     "pty_write",

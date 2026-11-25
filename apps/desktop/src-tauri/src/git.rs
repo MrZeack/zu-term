@@ -35,6 +35,35 @@ pub struct GitDiff {
     pub untracked: Vec<String>,
 }
 
+/// One commit of the history, newest first; parents always come after
+/// their children so the UI can draw the graph.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitCommit {
+    pub hash: String,
+    pub parents: Vec<String>,
+    pub author: String,
+    pub time: i64,
+    pub refs: Vec<String>,
+    pub subject: String,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitLogPage {
+    pub commits: Vec<GitCommit>,
+    pub has_more: bool,
+}
+
+/// Full message of a commit and its diff against its first parent.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitCommitDetail {
+    pub body: String,
+    pub diff: String,
+    pub truncated: bool,
+}
+
 pub const MAX_CWDS: usize = 64;
 const MAX_PATH_BYTES: usize = 4096;
 const MAX_GIT_FILE_BYTES: u64 = 1024;
@@ -45,6 +74,9 @@ const GIT_STATUS_TIMEOUT: Duration = Duration::from_secs(2);
 const MAX_GIT_DIFF_BYTES: usize = 2 * 1024 * 1024;
 const GIT_DIFF_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_UNTRACKED_FILES: usize = 500;
+pub const GIT_LOG_PAGE: usize = 200;
+const MAX_GIT_LOG_BYTES: usize = 4 * 1024 * 1024;
+const MAX_COMMIT_BODY_BYTES: usize = 64 * 1024;
 const POLL_INTERVAL: Duration = Duration::from_millis(15);
 
 fn read_text_file(path: &Path, limit: u64) -> Option<String> {
@@ -241,6 +273,8 @@ fn safe_git(root: &Path, args: &[&str]) -> Command {
     let mut command = Command::new("git");
     command
         .args(["-c", "core.fsmonitor=false", "-c", "core.quotepath=off"])
+        // Showing signatures would run gpg.
+        .args(["-c", "log.showSignature=false"])
         .args(args)
         .current_dir(root)
         .env("GIT_OPTIONAL_LOCKS", "0")
@@ -295,7 +329,7 @@ pub fn git_diff_in(root: &Path) -> Result<GitDiff, String> {
 
 /// Same folders the branch badge accepts: an absolute path that directly
 /// holds a repository.
-pub fn git_diff_for(cwd: &str) -> Result<GitDiff, String> {
+fn repository_root(cwd: &str) -> Result<&Path, String> {
     let trimmed = cwd.trim();
     let path = Path::new(trimmed);
     if trimmed.is_empty() || trimmed.len() > MAX_PATH_BYTES || !path.is_absolute() {
@@ -304,7 +338,112 @@ pub fn git_diff_for(cwd: &str) -> Result<GitDiff, String> {
     if detect_git_branch(path).is_none() {
         return Err("la carpeta no es la raíz de un repositorio git".into());
     }
-    git_diff_in(path)
+    Ok(path)
+}
+
+pub fn git_diff_for(cwd: &str) -> Result<GitDiff, String> {
+    git_diff_in(repository_root(cwd)?)
+}
+
+fn parse_log_record(record: &[u8]) -> Option<GitCommit> {
+    let text = String::from_utf8_lossy(record);
+    let mut fields = text.trim_start_matches('\n').splitn(6, '\u{1f}');
+    let hash = fields.next()?.to_owned();
+    let parents = fields.next()?.split_whitespace().map(str::to_owned).collect();
+    let author = fields.next()?.to_owned();
+    let time = fields.next()?.parse().ok()?;
+    let refs =
+        fields.next()?.split(", ").filter(|name| !name.is_empty()).map(str::to_owned).collect();
+    let subject = fields.next()?.to_owned();
+    (!hash.is_empty()).then_some(GitCommit { hash, parents, author, time, refs, subject })
+}
+
+/// `limit` commits of every branch and tag after skipping `skip`, newest
+/// first in an order where parents follow their children.
+pub fn git_log_in(root: &Path, skip: usize, limit: usize) -> Result<GitLogPage, String> {
+    let skip = format!("--skip={skip}");
+    let count = format!("--max-count={}", limit + 1);
+    let args = [
+        "log",
+        "--all",
+        "--date-order",
+        "--decorate=full",
+        "-z",
+        "--format=%H%x1f%P%x1f%an%x1f%at%x1f%D%x1f%s",
+        &skip,
+        &count,
+    ];
+    let (bytes, _) = run_command_capped(safe_git(root, &args), GIT_DIFF_TIMEOUT, MAX_GIT_LOG_BYTES)
+        .ok_or_else(|| "git log no respondió".to_string())?;
+    let mut commits: Vec<GitCommit> = bytes
+        .split(|byte| *byte == 0)
+        .filter(|record| !record.is_empty())
+        .filter_map(parse_log_record)
+        .collect();
+    let has_more = commits.len() > limit;
+    commits.truncate(limit);
+    Ok(GitLogPage { commits, has_more })
+}
+
+pub fn git_log_for(cwd: &str, skip: usize) -> Result<GitLogPage, String> {
+    git_log_in(repository_root(cwd)?, skip, GIT_LOG_PAGE)
+}
+
+fn valid_commit_hash(hash: &str) -> bool {
+    (7..=64).contains(&hash.len())
+        && hash.bytes().all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+}
+
+pub fn git_show_in(root: &Path, hash: &str) -> Result<GitCommitDetail, String> {
+    if !valid_commit_hash(hash) {
+        return Err("commit no válido".into());
+    }
+    let (body, _) = run_command_capped(
+        safe_git(root, &["show", "-s", "--format=%B", hash]),
+        GIT_DIFF_TIMEOUT,
+        MAX_COMMIT_BODY_BYTES,
+    )
+    .ok_or_else(|| "git show no respondió".to_string())?;
+    // A merge shows what it brought in compared with its first parent.
+    let args = [
+        "show",
+        "--format=",
+        "--no-color",
+        "--no-ext-diff",
+        "--no-textconv",
+        "-M",
+        "--diff-merges=first-parent",
+        hash,
+    ];
+    let (diff, truncated) =
+        run_command_capped(safe_git(root, &args), GIT_DIFF_TIMEOUT, MAX_GIT_DIFF_BYTES)
+            .ok_or_else(|| "git show no respondió".to_string())?;
+    Ok(GitCommitDetail {
+        body: String::from_utf8_lossy(&body).into_owned(),
+        diff: String::from_utf8_lossy(&diff).into_owned(),
+        truncated,
+    })
+}
+
+pub fn git_show_for(cwd: &str, hash: &str) -> Result<GitCommitDetail, String> {
+    if !valid_commit_hash(hash) {
+        return Err("commit no válido".into());
+    }
+    git_show_in(repository_root(cwd)?, hash)
+}
+
+#[tauri::command]
+pub async fn git_log(cwd: String, skip: usize) -> Result<GitLogPage, String> {
+    tauri::async_runtime::spawn_blocking(move || git_log_for(&cwd, skip))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_show(cwd: String, hash: String) -> Result<GitCommitDetail, String> {
+    tauri::async_runtime::spawn_blocking(move || git_show_for(&cwd, &hash))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -568,5 +707,87 @@ UU conflict.txt
             run_command_capped(big, Duration::from_secs(5), 100).expect("finishes");
         assert_eq!(bytes.len(), 100);
         assert!(truncated);
+    }
+    fn commit(dir: &Path, file: &str, text: &str, message: &str) {
+        fs::write(dir.join(file), text).unwrap();
+        git(dir, &["add", file]);
+        git(dir, &["commit", "-qm", message]);
+    }
+
+    fn history_repo(label: &str) -> PathBuf {
+        let root = repo(label);
+        git(&root, &["checkout", "-qb", "main"]);
+        commit(&root, "a.txt", "1\n", "primero");
+        git(&root, &["checkout", "-qb", "feature"]);
+        commit(&root, "b.txt", "feature\n", "en feature");
+        git(&root, &["checkout", "-q", "main"]);
+        commit(&root, "a.txt", "2\n", "segundo\n\ncuerpo del mensaje");
+        git(&root, &["merge", "-q", "--no-ff", "-m", "merge feature", "feature"]);
+        git(&root, &["tag", "v1"]);
+        git(&root, &["checkout", "-qb", "solo-aqui", "feature"]);
+        commit(&root, "c.txt", "c\n", "solo en otra rama");
+        git(&root, &["checkout", "-q", "main"]);
+        root
+    }
+
+    #[test]
+    fn log_lists_every_branch_newest_first_with_parents_and_refs() {
+        let root = history_repo("log");
+        let page = git_log_in(&root, 0, 100).expect("log");
+
+        let subjects: Vec<&str> = page.commits.iter().map(|c| c.subject.as_str()).collect();
+        assert_eq!(subjects.len(), 5, "{subjects:?}");
+        assert!(subjects.contains(&"solo en otra rama"), "all branches, like gitk --all");
+        let merge = page.commits.iter().find(|c| c.subject == "merge feature").unwrap();
+        assert_eq!(merge.parents.len(), 2);
+        assert!(merge.refs.iter().any(|r| r == "HEAD -> refs/heads/main"), "{:?}", merge.refs);
+        assert!(merge.refs.iter().any(|r| r == "tag: refs/tags/v1"));
+        assert_eq!(merge.author, "t");
+        assert!(merge.time > 0);
+        assert_eq!(merge.hash.len(), 40);
+        let first = page.commits.iter().position(|c| c.subject == "primero").unwrap();
+        assert_eq!(first, 4, "parents always come after their children");
+        assert!(!page.has_more);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn log_pages_through_the_history() {
+        let root = history_repo("log-pages");
+        let first = git_log_in(&root, 0, 2).expect("page 1");
+        let rest = git_log_in(&root, 2, 2).expect("page 2");
+        let last = git_log_in(&root, 4, 2).expect("page 3");
+
+        assert!(first.has_more && rest.has_more && !last.has_more);
+        assert_eq!(first.commits.len() + rest.commits.len() + last.commits.len(), 5);
+        assert_ne!(first.commits[0].hash, rest.commits[0].hash);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn show_returns_the_full_message_and_the_diff_against_the_first_parent() {
+        let root = history_repo("show");
+        let page = git_log_in(&root, 0, 100).unwrap();
+        let second = page.commits.iter().find(|c| c.subject == "segundo").unwrap();
+        let merge = page.commits.iter().find(|c| c.subject == "merge feature").unwrap();
+
+        let detail = git_show_in(&root, &second.hash).expect("show");
+        assert_eq!(detail.body.trim_end(), "segundo\n\ncuerpo del mensaje");
+        assert!(detail.diff.contains("-1") && detail.diff.contains("+2"), "{}", detail.diff);
+
+        let merged = git_show_in(&root, &merge.hash).expect("merge");
+        assert!(merged.diff.contains("+feature"), "what the merge brought in: {}", merged.diff);
+        assert!(!merged.diff.contains("diff --cc"), "plain diffs only");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn show_only_accepts_commit_hashes() {
+        let root = history_repo("show-hash");
+        assert!(git_show_for(root.to_str().unwrap(), "--output=/tmp/x").is_err());
+        assert!(git_show_for(root.to_str().unwrap(), "HEAD").is_err());
+        assert!(git_show_for(root.to_str().unwrap(), "abc").is_err(), "too short");
+        assert!(git_show_for("relative", "abcdef1").is_err());
+        let _ = fs::remove_dir_all(root);
     }
 }
