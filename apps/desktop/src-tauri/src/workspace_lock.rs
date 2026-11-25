@@ -9,6 +9,10 @@ use crate::config::{AppPaths, ensure_private_dir, private_file_options};
 
 const WORKSPACE_LOCK_DIR_NAME: &str = "workspace-locks";
 const MAX_WORKSPACE_ID_BYTES: usize = 96;
+// A process being started (a shell, git) holds a copy of every descriptor
+// until it runs `exec`, so a just-released lock can look taken for a moment.
+const LOCK_ATTEMPTS: u32 = 5;
+const LOCK_RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis(20);
 
 struct HeldLock {
     owner: String,
@@ -63,10 +67,17 @@ impl WorkspaceLocks {
         }
         ensure_private_dir(&self.directory)?;
         let file = open_lock_file(&self.lock_path(workspace_id))?;
-        match file.try_lock() {
-            Ok(()) => {}
-            Err(TryLockError::WouldBlock) => return Ok(false),
-            Err(TryLockError::Error(error)) => return Err(error.to_string()),
+        let mut attempt = 1;
+        loop {
+            match file.try_lock() {
+                Ok(()) => break,
+                Err(TryLockError::WouldBlock) if attempt < LOCK_ATTEMPTS => {
+                    attempt += 1;
+                    std::thread::sleep(LOCK_RETRY_DELAY);
+                }
+                Err(TryLockError::WouldBlock) => return Ok(false),
+                Err(TryLockError::Error(error)) => return Err(error.to_string()),
+            }
         }
         held.insert(workspace_id.to_owned(), HeldLock { owner: owner.to_owned(), _file: file });
         Ok(true)
@@ -183,6 +194,26 @@ mod tests {
         drop(first); // the process exits or crashes
         assert_eq!(second.acquire("ws-1", "main"), Ok(true));
 
+        fs::remove_dir_all(directory).expect("cleanup");
+    }
+
+    #[test]
+    fn a_lock_held_for_a_moment_by_a_starting_process_does_not_block() {
+        // A process being started inherits the lock file descriptor until it
+        // runs `exec`; the lock outlives the release for that moment.
+        let directory = test_dir("locks-inherited");
+        let locks = WorkspaceLocks::in_directory(directory.clone());
+        locks.acquire("ws-1", "main").unwrap();
+        let inherited = super::open_lock_file(&locks.lock_path("ws-1")).unwrap();
+        locks.release("ws-1", "main").unwrap();
+        inherited.lock().unwrap();
+        let exec = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            drop(inherited);
+        });
+
+        assert_eq!(locks.acquire("ws-1", "other-window"), Ok(true));
+        exec.join().unwrap();
         fs::remove_dir_all(directory).expect("cleanup");
     }
 
