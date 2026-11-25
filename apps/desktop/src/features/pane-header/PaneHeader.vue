@@ -3,10 +3,12 @@ import { computed, nextTick, ref, useTemplateRef, watch } from 'vue';
 import { UI_DENSITY } from '../../core/ui-density.ts';
 import { formatGitStatus, formatGitStatusTooltip, type GitStatusSummary } from '../git/git.ts';
 import type { PaneAttention } from '../layout/layout.store.ts';
+import type { AgentSessionTone } from '../workspace/agent.ts';
 
 const props = defineProps<{
   title: string;
   command?: string | undefined;
+  agentTone?: AgentSessionTone | undefined;
   path: string;
   branch?: string | undefined;
   gitStatus?: GitStatusSummary | undefined;
@@ -94,7 +96,7 @@ const commit = () => emit('rename', draft.value);
       @blur="commit"
     />
     <div v-else class="title-row">
-      <span v-if="command" class="command-badge">
+      <span v-if="command" class="command-badge" :class="agentTone && `agent-${agentTone}`">
         <span class="command-dot" aria-hidden="true" />
         {{ command }}
       </span>
@@ -213,6 +215,14 @@ const commit = () => emit('rename', draft.value);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.command-badge.agent-with-id {
+  color: var(--agent-with-id);
+}
+
+.command-badge.agent-without-id {
+  color: var(--agent-without-id);
 }
 
 .branch-badge {

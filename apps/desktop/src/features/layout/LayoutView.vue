@@ -6,6 +6,7 @@ import { useLayoutStore } from '../../core/app-stores.ts';
 import PaneHeader from '../pane-header/PaneHeader.vue';
 import { paneTitle, shortPath } from '../pane-header/pane-title.ts';
 import TerminalPane from '../terminal/TerminalPane.vue';
+import { agentSessionTone } from '../workspace/agent.ts';
 import { contextMenuPosition, type ContextMenuPosition } from '../context-menu/position.ts';
 import type { ThemeName } from '../theme/theme.ts';
 import { computeGeometry, ratioAt, type Divider, type Rect } from './layout-geometry.ts';
@@ -214,6 +215,7 @@ const dropPreviewRect = computed<Rect | null>(() => {
       <PaneHeader
         :title="paneTitle(store.panes[id] ?? {})"
         :command="store.panes[id]?.command"
+        :agent-tone="agentSessionTone(store.panes[id]?.agent)"
         :path="shortPath(store.panes[id]?.cwd, props.home, PATH_MAX)"
         :branch="
           props.gitBranches?.[store.panes[id]?.cwd ?? store.panes[id]?.startCwd ?? '']?.branch

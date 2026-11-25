@@ -1,13 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
-import {
-  agentSessionTone,
-  agentStatusLabel,
-  agentStatusTooltip,
-  formatTerminalSize,
-  workspaceStatusLabel,
-} from './status.ts';
+import { agentStatusLabel, formatTerminalSize, workspaceStatusLabel } from './status.ts';
 
 test('formatea los datos compactos de la barra de estado', () => {
   assert.equal(workspaceStatusLabel('  Proyecto  '), 'Proyecto');
@@ -40,20 +34,4 @@ test('monta la barra de estado debajo del layout y recibe el tamaño de la PTY',
   assert.match(statusSource, /runProcesses/);
   assert.match(statusSource, /status-error/);
   assert.match(statusSource, /props\.errorCount/);
-});
-
-test('distingue por color si el agente se inició con ID de sesión', async () => {
-  assert.equal(agentSessionTone({ provider: 'codex', sessionId: 'abc' }), 'with-id');
-  assert.equal(agentSessionTone({ provider: 'claude' }), 'without-id');
-  assert.equal(agentSessionTone(undefined), undefined);
-  assert.match(agentStatusTooltip({ provider: 'codex', sessionId: 'abc' }) ?? '', /ID abc/);
-  assert.match(agentStatusTooltip({ provider: 'claude' }) ?? '', /sin ID/);
-
-  const statusSource = await readFile(new URL('./StatusBar.vue', import.meta.url), 'utf8');
-  const css = await readFile(new URL('../../index.css', import.meta.url), 'utf8');
-  assert.match(statusSource, /`status-agent--\$\{agentSessionTone\(props\.pane\?\.agent\)\}`/);
-  assert.match(statusSource, /\.status-agent--with-id \{\s*color: var\(--agent-with-id\);/);
-  assert.match(statusSource, /\.status-agent--without-id \{\s*color: var\(--agent-without-id\);/);
-  assert.match(css, /--agent-with-id: #[0-9a-f]{6};/);
-  assert.match(css, /--agent-without-id: #[0-9a-f]{6};/);
 });

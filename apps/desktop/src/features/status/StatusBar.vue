@@ -7,9 +7,7 @@ import {
   type RunProcessInfo,
 } from './run-processes.ts';
 import {
-  agentSessionTone,
   agentStatusLabel,
-  agentStatusTooltip,
   formatTerminalSize,
   workspaceStatusLabel,
   type StatusPane,
@@ -54,11 +52,7 @@ const statusBranchTooltip = computed(() => {
       <span class="status-kicker">SPLIT ACTIVO</span>
       <strong v-if="props.pane" class="status-title">{{ props.pane.title }}</strong>
       <span v-if="props.pane?.command" class="status-command">{{ props.pane.command }}</span>
-      <span
-        v-if="agentStatusLabel(props.pane?.agent)"
-        :class="['status-agent', `status-agent--${agentSessionTone(props.pane?.agent)}`]"
-        :title="agentStatusTooltip(props.pane?.agent)"
-      >
+      <span v-if="agentStatusLabel(props.pane?.agent)" class="status-agent">
         {{ agentStatusLabel(props.pane?.agent) }}
       </span>
       <span v-if="props.pane?.branch" class="status-branch" :title="statusBranchTooltip">
@@ -184,14 +178,6 @@ const statusBranchTooltip = computed(() => {
 
 .status-agent {
   color: var(--accent-alt);
-}
-
-.status-agent--with-id {
-  color: var(--agent-with-id);
-}
-
-.status-agent--without-id {
-  color: var(--agent-without-id);
 }
 
 .status-branch {

@@ -20,6 +20,15 @@ const resumeCommands: Record<AgentProvider, string[]> = {
   antigravity: ['agy', '--conversation'],
 };
 
+// Green when the agent started with a session ID (it resumes on restore),
+// yellow when it did not.
+export type AgentSessionTone = 'with-id' | 'without-id';
+
+export function agentSessionTone(agent: AgentState | undefined): AgentSessionTone | undefined {
+  if (!agent) return undefined;
+  return agent.sessionId ? 'with-id' : 'without-id';
+}
+
 export function isAgentProvider(value: unknown): value is AgentProvider {
   return typeof value === 'string' && (AGENT_PROVIDERS as readonly string[]).includes(value);
 }
