@@ -31,6 +31,21 @@ export function agentStatusLabel(agent: AgentState | undefined): string | undefi
   return `${AGENT_LABELS[agent.provider]} · ${agent.sessionId ? 'resume' : 'nueva'}`;
 }
 
+// Green when started with a session ID (it resumes on restore), yellow when not.
+export type AgentSessionTone = 'with-id' | 'without-id';
+
+export function agentSessionTone(agent: AgentState | undefined): AgentSessionTone | undefined {
+  if (!agent) return undefined;
+  return agent.sessionId ? 'with-id' : 'without-id';
+}
+
+export function agentStatusTooltip(agent: AgentState | undefined): string | undefined {
+  if (!agent) return undefined;
+  return agent.sessionId
+    ? `Iniciado con ID ${agent.sessionId}: se reanuda al restaurar el workspace`
+    : 'Iniciado sin ID: no se reanuda al restaurar el workspace';
+}
+
 export function formatTerminalSize(cols: number | undefined, rows: number | undefined): string {
   const validSize = (value: number | undefined): value is number =>
     typeof value === 'number' && Number.isInteger(value) && value > 0;
