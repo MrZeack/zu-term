@@ -1,37 +1,22 @@
 <script setup lang="ts">
-import { computed, nextTick, useTemplateRef, watch } from 'vue';
-import DiffView from './DiffView.vue';
+import { nextTick, useTemplateRef, watch } from 'vue';
 import GitHistory from './GitHistory.vue';
-import { diffSummary, parseUnifiedDiff } from './git-diff.ts';
-import type { GitView, GitViewTab } from './git-view.ts';
+import type { GitView } from './git-view.ts';
 
 const props = defineProps<{
   view: GitView['state'];
+  local: { staged: boolean; unstaged: boolean };
   path: string;
 }>();
 
 const emit = defineEmits<{
   close: [];
   refresh: [];
-  tab: [tab: GitViewTab];
   select: [hash: string];
   loadMore: [];
 }>();
 
-const TABS: { id: GitViewTab; label: string }[] = [
-  { id: 'changes', label: 'Cambios' },
-  { id: 'history', label: 'Historial' },
-];
-
 const dialog = useTemplateRef<HTMLElement>('dialog');
-const changes = computed(() => props.view.changes);
-const files = computed(() => parseUnifiedDiff(changes.value.diff?.diff ?? ''));
-const summary = computed(() => diffSummary(files.value));
-const untracked = computed(() => changes.value.diff?.untracked ?? []);
-const empty = computed(() => files.value.length === 0 && untracked.value.length === 0);
-const busy = computed(() =>
-  props.view.tab === 'changes' ? changes.value.loading : props.view.history.loading,
-);
 
 watch(
   () => props.view.open,
@@ -64,37 +49,13 @@ watch(
           <span class="dialog-kicker">⎇ {{ view.branch }}</span>
           <h2 id="diff-dialog-title" :title="path">{{ path }}</h2>
         </div>
-        <div class="diff-tabs" role="tablist" aria-label="Vista de git">
-          <button
-            v-for="tab in TABS"
-            :key="tab.id"
-            class="diff-tab"
-            type="button"
-            role="tab"
-            :aria-selected="view.tab === tab.id"
-            @click="emit('tab', tab.id)"
-          >
-            {{ tab.label }}
-          </button>
-        </div>
-        <span
-          v-if="view.tab === 'changes' && !changes.loading && !changes.error && !empty"
-          class="diff-summary"
-        >
-          {{ summary.files }} archivo{{ summary.files === 1 ? '' : 's' }}
-          <b class="add">+{{ summary.additions }}</b>
-          <b class="del">−{{ summary.deletions }}</b>
-        </span>
-        <span
-          v-else-if="view.tab === 'history' && view.history.commits.length"
-          class="diff-summary"
-        >
-          {{ view.history.commits.length }}{{ view.history.hasMore ? '+' : '' }} commits
+        <span v-if="view.commits.length" class="diff-summary">
+          {{ view.commits.length }}{{ view.hasMore ? '+' : '' }} commits
         </span>
         <button
           class="diff-action"
           type="button"
-          :disabled="busy"
+          :disabled="view.loading || view.changesLoading"
           title="Actualizar"
           @click="emit('refresh')"
         >
@@ -104,32 +65,18 @@ watch(
           ×
         </button>
       </header>
-
-      <template v-if="view.tab === 'changes'">
-        <p v-if="changes.loading" class="diff-state">Leyendo cambios…</p>
-        <p v-else-if="changes.error" class="diff-state diff-error" role="alert">
-          {{ changes.error }}
-        </p>
-        <p v-else-if="empty" class="diff-state">
-          Sin cambios: el directorio de trabajo está limpio.
-        </p>
-        <DiffView
-          v-else
-          :files="files"
-          :untracked="untracked"
-          :truncated="changes.diff?.truncated"
-        />
-      </template>
       <GitHistory
-        v-else
-        :commits="view.history.commits"
-        :has-more="view.history.hasMore"
-        :loading="view.history.loading"
-        :error="view.history.error"
-        :selected="view.history.selected"
-        :detail-loading="view.history.detailLoading"
-        :detail-error="view.history.detailError"
-        :detail="view.history.detail"
+        :commits="view.commits"
+        :has-more="view.hasMore"
+        :loading="view.loading || view.changesLoading"
+        :error="view.error"
+        :changes="view.changes"
+        :changes-error="view.changesError"
+        :local="local"
+        :selected="view.selected"
+        :detail-loading="view.detailLoading"
+        :detail-error="view.detailError"
+        :detail="view.detail"
         @select="(hash) => emit('select', hash)"
         @load-more="emit('loadMore')"
       />
@@ -193,52 +140,10 @@ watch(
   white-space: nowrap;
 }
 
-.diff-tabs {
-  display: inline-flex;
-  padding: 2px;
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
-  background: var(--pane-bg);
-}
-
-.diff-tab {
-  padding: 4px 12px;
-  border: 0;
-  border-radius: 6px;
-  color: var(--muted);
-  background: transparent;
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.diff-tab[aria-selected='true'] {
-  color: var(--text);
-  background: var(--accent-soft);
-}
-
-.diff-tab:focus-visible {
-  outline: 2px solid var(--accent-alt);
-  outline-offset: 1px;
-}
-
 .diff-summary {
   color: var(--muted);
   font-size: 12px;
   white-space: nowrap;
-}
-
-.diff-summary b {
-  margin-left: 6px;
-}
-
-.add {
-  color: var(--ok);
-}
-
-.del {
-  color: var(--danger, #ff8c8c);
 }
 
 .diff-action {
@@ -264,17 +169,5 @@ watch(
 .diff-action:disabled {
   cursor: default;
   opacity: 0.5;
-}
-
-.diff-state {
-  margin: 0;
-  padding: 32px 16px;
-  color: var(--muted);
-  font-size: 13px;
-  text-align: center;
-}
-
-.diff-error {
-  color: var(--danger, #ff8c8c);
 }
 </style>

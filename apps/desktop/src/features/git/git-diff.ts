@@ -1,6 +1,8 @@
-// Uncommitted changes of a repository, as returned by the `git_diff` command.
+// Uncommitted changes of a repository, as returned by the `git_diff` command:
+// what is in the index, what is not, and untracked file names.
 export interface GitDiff {
-  diff: string;
+  staged: string;
+  unstaged: string;
   truncated: boolean;
   untracked: string[];
 }

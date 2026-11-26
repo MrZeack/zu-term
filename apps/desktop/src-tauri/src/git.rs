@@ -25,12 +25,14 @@ pub struct GitBranchInfo {
     pub status: Option<GitStatusSummary>,
 }
 
-/// Uncommitted changes of a repository: staged and unstaged against `HEAD`
-/// as a unified diff (capped), plus untracked file names.
+/// Uncommitted changes of a repository, as gitk shows them: what is in the
+/// index (against `HEAD`), what is not (index against the working tree),
+/// both capped together, plus untracked file names.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct GitDiff {
-    pub diff: String,
+    pub staged: String,
+    pub unstaged: String,
     pub truncated: bool,
     pub untracked: Vec<String>,
 }
@@ -291,23 +293,13 @@ fn diff_output(root: &Path, extra: &[&str], limit: usize) -> Result<(Vec<u8>, bo
 }
 
 pub fn git_diff_in(root: &Path) -> Result<GitDiff, String> {
-    let has_head = run_command_capped(
-        safe_git(root, &["rev-parse", "--verify", "-q", "HEAD"]),
-        GIT_DIFF_TIMEOUT,
-        64,
-    )
-    .is_some();
-    let (mut bytes, mut truncated) = if has_head {
-        diff_output(root, &["HEAD"], MAX_GIT_DIFF_BYTES)?
+    // `--cached` compares with HEAD, or with nothing before the first commit.
+    let (staged, staged_truncated) = diff_output(root, &["--cached"], MAX_GIT_DIFF_BYTES)?;
+    let (unstaged, truncated) = if staged_truncated {
+        (Vec::new(), true)
     } else {
-        // Before the first commit: what is staged, then what is not.
-        diff_output(root, &["--cached"], MAX_GIT_DIFF_BYTES)?
+        diff_output(root, &[], MAX_GIT_DIFF_BYTES - staged.len())?
     };
-    if !has_head && !truncated {
-        let (rest, rest_truncated) = diff_output(root, &[], MAX_GIT_DIFF_BYTES - bytes.len())?;
-        bytes.extend(rest);
-        truncated = rest_truncated;
-    }
 
     let untracked = run_command_capped(
         safe_git(root, &["ls-files", "--others", "--exclude-standard", "-z"]),
@@ -324,7 +316,12 @@ pub fn git_diff_in(root: &Path) -> Result<GitDiff, String> {
     })
     .unwrap_or_default();
 
-    Ok(GitDiff { diff: String::from_utf8_lossy(&bytes).into_owned(), truncated, untracked })
+    Ok(GitDiff {
+        staged: String::from_utf8_lossy(&staged).into_owned(),
+        unstaged: String::from_utf8_lossy(&unstaged).into_owned(),
+        truncated,
+        untracked,
+    })
 }
 
 /// Same folders the branch badge accepts: an absolute path that directly
@@ -637,7 +634,7 @@ UU conflict.txt
     }
 
     #[test]
-    fn diff_shows_changes_against_head_and_lists_untracked_files() {
+    fn diff_separates_staged_unstaged_and_untracked_changes() {
         let root = repo("diff");
         fs::write(root.join("a.txt"), "old\n").unwrap();
         git(&root, &["add", "a.txt"]);
@@ -648,9 +645,14 @@ UU conflict.txt
         fs::write(root.join("b.txt"), "untracked\n").unwrap();
 
         let diff = git_diff_in(&root).expect("diff");
-        assert!(diff.diff.contains("-old"), "{}", diff.diff);
-        assert!(diff.diff.contains("+new"));
-        assert!(diff.diff.contains("+staged"), "staged changes are included");
+        assert!(diff.staged.contains("+staged"), "{}", diff.staged);
+        assert!(!diff.staged.contains("+new"), "only what is in the index");
+        assert!(
+            diff.unstaged.contains("-old") && diff.unstaged.contains("+new"),
+            "{}",
+            diff.unstaged
+        );
+        assert!(!diff.unstaged.contains("+staged"));
         assert_eq!(diff.untracked, vec!["b.txt".to_string()]);
         assert!(!diff.truncated);
         let _ = fs::remove_dir_all(root);
@@ -663,7 +665,7 @@ UU conflict.txt
         git(&root, &["add", "a.txt"]);
 
         let diff = git_diff_in(&root).expect("diff");
-        assert!(diff.diff.contains("+first"), "{}", diff.diff);
+        assert!(diff.staged.contains("+first"), "{}", diff.staged);
         let _ = fs::remove_dir_all(root);
     }
 
@@ -682,7 +684,7 @@ UU conflict.txt
         fs::write(root.join("a.txt"), "new\n").unwrap();
 
         let diff = git_diff_in(&root).expect("diff");
-        assert!(diff.diff.contains("+new"));
+        assert!(diff.unstaged.contains("+new"));
         assert!(!marker.exists(), "a repository setting ran a command");
         let _ = fs::remove_dir_all(root);
     }

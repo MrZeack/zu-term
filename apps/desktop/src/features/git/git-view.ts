@@ -1,4 +1,4 @@
-import { reactive } from 'vue';
+import { computed, reactive } from 'vue';
 import type { GitDiff } from './git-diff.ts';
 import type { GitCommit, GitCommitDetail, GitLogPage } from './git-log.ts';
 
@@ -8,39 +8,50 @@ export interface GitViewClient {
   show(cwd: string, hash: string): Promise<GitCommitDetail>;
 }
 
-export type GitViewTab = 'changes' | 'history';
+// Rows above the history for uncommitted work, as in gitk.
+export const LOCAL_STAGED = 'local:staged';
+export const LOCAL_UNSTAGED = 'local:unstaged';
+
+export const isLocalRow = (id: string | null) => id === LOCAL_STAGED || id === LOCAL_UNSTAGED;
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 // State of the git dialog of one split folder. Every request carries the
 // generation it started in: answers that arrive after the dialog closed,
-// was reopened or moved on are dropped.
+// was reopened or refreshed are dropped.
 export function createGitView(client: GitViewClient) {
   const state = reactive({
     open: false,
     cwd: '',
     branch: '',
-    tab: 'changes' as GitViewTab,
-    changes: { loading: false, error: '', diff: undefined as GitDiff | undefined },
-    history: {
-      loaded: false,
-      loading: false,
-      error: '',
-      commits: [] as GitCommit[],
-      hasMore: false,
-      selected: null as string | null,
-      detailLoading: false,
-      detailError: '',
-      detail: undefined as GitCommitDetail | undefined,
-    },
+    changesLoading: false,
+    changesError: '',
+    changes: undefined as GitDiff | undefined,
+    loading: false,
+    loaded: false,
+    error: '',
+    commits: [] as GitCommit[],
+    hasMore: false,
+    selected: null as string | null,
+    detailLoading: false,
+    detailError: '',
+    detail: undefined as GitCommitDetail | undefined,
   });
   let generation = 0;
   let detailRequest = 0;
 
-  function resetHistory() {
-    Object.assign(state.history, {
-      loaded: false,
+  const local = computed(() => ({
+    staged: Boolean(state.changes?.staged),
+    unstaged: Boolean(state.changes?.unstaged || state.changes?.untracked.length),
+  }));
+
+  function reset() {
+    Object.assign(state, {
+      changesLoading: false,
+      changesError: '',
+      changes: undefined,
       loading: false,
+      loaded: false,
       error: '',
       commits: [],
       hasMore: false,
@@ -51,93 +62,101 @@ export function createGitView(client: GitViewClient) {
     });
   }
 
-  function loadChanges() {
+  function select(id: string) {
+    const request = ++detailRequest;
+    Object.assign(state, {
+      selected: id,
+      detailLoading: false,
+      detailError: '',
+      detail: undefined,
+    });
+    if (isLocalRow(id)) return;
     const current = generation;
-    Object.assign(state.changes, { loading: true, error: '', diff: undefined });
-    client.diff(state.cwd).then(
-      (diff) => {
-        if (current === generation) Object.assign(state.changes, { loading: false, diff });
+    state.detailLoading = true;
+    client.show(state.cwd, id).then(
+      (detail) => {
+        if (current !== generation || request !== detailRequest) return;
+        Object.assign(state, { detailLoading: false, detail });
       },
       (error: unknown) => {
-        if (current === generation) {
-          Object.assign(state.changes, { loading: false, error: message(error) });
-        }
+        if (current !== generation || request !== detailRequest) return;
+        Object.assign(state, { detailLoading: false, detailError: message(error) });
       },
     );
   }
 
-  function loadHistory(skip: number) {
+  // Once both have loaded, the first row is selected, as in gitk.
+  function selectFirstRow() {
+    if (state.selected || state.changesLoading || !state.loaded) return;
+    if (local.value.staged) select(LOCAL_STAGED);
+    else if (local.value.unstaged) select(LOCAL_UNSTAGED);
+    else if (state.commits[0]) select(state.commits[0].hash);
+  }
+
+  function loadChanges() {
     const current = generation;
-    state.history.loading = true;
-    state.history.error = '';
-    client.log(state.cwd, skip).then(
-      (page) => {
+    Object.assign(state, { changesLoading: true, changesError: '', changes: undefined });
+    client.diff(state.cwd).then(
+      (changes) => {
         if (current !== generation) return;
-        state.history.commits =
-          skip === 0 ? page.commits : [...state.history.commits, ...page.commits];
-        state.history.hasMore = page.hasMore;
-        state.history.loaded = true;
-        state.history.loading = false;
+        Object.assign(state, { changesLoading: false, changes });
+        selectFirstRow();
       },
       (error: unknown) => {
         if (current !== generation) return;
-        state.history.loading = false;
-        state.history.error = message(error);
+        Object.assign(state, { changesLoading: false, changesError: message(error) });
+        selectFirstRow();
       },
     );
+  }
+
+  function loadCommits(skip: number) {
+    const current = generation;
+    Object.assign(state, { loading: true, error: '' });
+    client.log(state.cwd, skip).then(
+      (page) => {
+        if (current !== generation) return;
+        Object.assign(state, {
+          commits: skip === 0 ? page.commits : [...state.commits, ...page.commits],
+          hasMore: page.hasMore,
+          loaded: true,
+          loading: false,
+        });
+        selectFirstRow();
+      },
+      (error: unknown) => {
+        if (current !== generation) return;
+        Object.assign(state, { loading: false, loaded: true, error: message(error) });
+        selectFirstRow();
+      },
+    );
+  }
+
+  function load() {
+    generation += 1;
+    reset();
+    loadChanges();
+    loadCommits(0);
   }
 
   return {
     state,
+    local,
     open(cwd: string, branch: string) {
-      generation += 1;
-      Object.assign(state, { open: true, cwd, branch, tab: 'changes' });
-      resetHistory();
-      loadChanges();
+      Object.assign(state, { open: true, cwd, branch });
+      load();
     },
     close() {
       generation += 1;
       state.open = false;
-      resetHistory();
+      reset();
     },
-    setTab(tab: GitViewTab) {
-      state.tab = tab;
-      if (tab === 'history' && !state.history.loaded && !state.history.loading) loadHistory(0);
-    },
-    refresh() {
-      generation += 1;
-      if (state.tab === 'changes') {
-        resetHistory();
-        loadChanges();
-      } else {
-        resetHistory();
-        loadHistory(0);
-      }
-    },
+    refresh: load,
     loadMore() {
-      if (state.history.loading || !state.history.hasMore) return;
-      loadHistory(state.history.commits.length);
+      if (state.loading || !state.hasMore) return;
+      loadCommits(state.commits.length);
     },
-    select(hash: string) {
-      const current = generation;
-      const request = ++detailRequest;
-      Object.assign(state.history, {
-        selected: hash,
-        detailLoading: true,
-        detailError: '',
-        detail: undefined,
-      });
-      client.show(state.cwd, hash).then(
-        (detail) => {
-          if (current !== generation || request !== detailRequest) return;
-          Object.assign(state.history, { detailLoading: false, detail });
-        },
-        (error: unknown) => {
-          if (current !== generation || request !== detailRequest) return;
-          Object.assign(state.history, { detailLoading: false, detailError: message(error) });
-        },
-      );
-    },
+    select,
   };
 }
 

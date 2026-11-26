@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import type { GitDiff } from './git-diff.ts';
 import type { GitCommit, GitCommitDetail, GitLogPage } from './git-log.ts';
-import { createGitView, type GitViewClient } from './git-view.ts';
+import { createGitView, LOCAL_STAGED, LOCAL_UNSTAGED, type GitViewClient } from './git-view.ts';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -53,36 +53,57 @@ function fakeClient() {
 }
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+const noChanges: GitDiff = { staged: '', unstaged: '', truncated: false, untracked: [] };
 
-test('abre en Cambios y carga el historial solo al pedirlo', async () => {
+test('abre el historial cargando a la vez los cambios locales y los commits', async () => {
   const { client, calls, diffs, logs } = fakeClient();
   const view = createGitView(client);
 
   view.open('/repo', 'main');
-  assert.equal(view.state.tab, 'changes');
-  assert.equal(view.state.changes.loading, true);
-  diffs[0]?.resolve({ diff: '', truncated: false, untracked: [] });
-  await flush();
-  assert.equal(view.state.changes.loading, false);
-  assert.deepEqual(calls, ['diff /repo']);
-
-  view.setTab('history');
+  assert.deepEqual(calls, ['diff /repo', 'log /repo 0']);
   logs[0]?.resolve({ commits: [commit('a'), commit('b')], hasMore: true });
   await flush();
-  assert.deepEqual(
-    view.state.history.commits.map((c) => c.hash),
-    ['a', 'b'],
-  );
-  view.setTab('changes');
-  view.setTab('history');
-  assert.equal(logs.length, 1, 'the history is loaded once');
+  assert.equal(view.state.selected, null, 'waits for the local changes');
+
+  diffs[0]?.resolve({ ...noChanges, staged: 'diff --git a/x b/x', untracked: ['n.txt'] });
+  await flush();
+  assert.deepEqual(view.local.value, { staged: true, unstaged: true });
+  assert.equal(view.state.selected, LOCAL_STAGED, 'selects the first row, as gitk');
 });
 
-test('carga más commits y muestra el detalle del elegido', async () => {
-  const { client, calls, logs, shows } = fakeClient();
+test('sin cambios locales elige el commit más reciente', async () => {
+  const { client, diffs, logs, shows } = fakeClient();
   const view = createGitView(client);
   view.open('/repo', 'main');
-  view.setTab('history');
+  diffs[0]?.resolve(noChanges);
+  logs[0]?.resolve({ commits: [commit('a')], hasMore: false });
+  await flush();
+
+  assert.deepEqual(view.local.value, { staged: false, unstaged: false });
+  assert.equal(view.state.selected, 'a');
+  shows[0]?.resolve({ body: 'a body', diff: '', truncated: false });
+  await flush();
+  assert.equal(view.state.detail?.body, 'a body');
+});
+
+test('elegir los cambios locales no pide nada al backend', async () => {
+  const { client, calls, diffs, logs } = fakeClient();
+  const view = createGitView(client);
+  view.open('/repo', 'main');
+  diffs[0]?.resolve({ ...noChanges, unstaged: 'diff --git a/x b/x' });
+  logs[0]?.resolve({ commits: [commit('a')], hasMore: false });
+  await flush();
+
+  view.select(LOCAL_UNSTAGED);
+  assert.equal(view.state.selected, LOCAL_UNSTAGED);
+  assert.ok(!calls.some((call) => call.startsWith('show')));
+});
+
+test('carga más commits y una respuesta tardía nunca pisa la elegida', async () => {
+  const { client, calls, diffs, logs, shows } = fakeClient();
+  const view = createGitView(client);
+  view.open('/repo', 'main');
+  diffs[0]?.resolve({ ...noChanges, staged: 'diff --git a/x b/x' });
   logs[0]?.resolve({ commits: [commit('a')], hasMore: true });
   await flush();
 
@@ -90,10 +111,9 @@ test('carga más commits y muestra el detalle del elegido', async () => {
   logs[1]?.resolve({ commits: [commit('b')], hasMore: false });
   await flush();
   assert.deepEqual(
-    view.state.history.commits.map((c) => c.hash),
+    view.state.commits.map((c) => c.hash),
     ['a', 'b'],
   );
-  assert.equal(view.state.history.hasMore, false);
   assert.ok(calls.includes('log /repo 1'));
 
   view.select('a');
@@ -101,8 +121,7 @@ test('carga más commits y muestra el detalle del elegido', async () => {
   shows[1]?.resolve({ body: 'b body', diff: '', truncated: false });
   shows[0]?.resolve({ body: 'a body', diff: '', truncated: false });
   await flush();
-  assert.equal(view.state.history.selected, 'b');
-  assert.equal(view.state.history.detail?.body, 'b body', 'a late answer never replaces it');
+  assert.equal(view.state.detail?.body, 'b body');
 });
 
 test('muestra los errores y descarta respuestas tras cerrar', async () => {
@@ -111,29 +130,30 @@ test('muestra los errores y descarta respuestas tras cerrar', async () => {
   view.open('/repo', 'main');
   diffs[0]?.reject('git diff no respondió');
   await flush();
-  assert.equal(view.state.changes.error, 'git diff no respondió');
+  assert.equal(view.state.changesError, 'git diff no respondió');
 
-  view.setTab('history');
   view.close();
   logs[0]?.resolve({ commits: [commit('a')], hasMore: false });
   await flush();
   assert.equal(view.state.open, false);
-  assert.deepEqual(view.state.history.commits, []);
+  assert.deepEqual(view.state.commits, []);
 });
 
-test('el diálogo tiene pestañas Cambios e Historial con el grafo', async () => {
+test('el diálogo es solo el historial, con los cambios locales arriba y el grafo', async () => {
   const dialog = await readFile(new URL('./GitDiffDialog.vue', import.meta.url), 'utf8');
   const history = await readFile(new URL('./GitHistory.vue', import.meta.url), 'utf8');
+  const diffView = await readFile(new URL('./DiffView.vue', import.meta.url), 'utf8');
   const client = await readFile(new URL('./git-client.ts', import.meta.url), 'utf8');
 
-  assert.match(dialog, /role="tablist"/);
-  assert.match(dialog, /role="tab"/);
-  assert.match(dialog, /\{ id: 'changes', label: 'Cambios' \}/);
-  assert.match(dialog, /\{ id: 'history', label: 'Historial' \}/);
+  assert.doesNotMatch(dialog, /role="tablist"/);
   assert.match(dialog, /<GitHistory/);
-  assert.match(dialog, /<DiffView/);
   assert.match(history, /computeGraph/);
   assert.match(history, /<svg/);
+  assert.match(history, /Cambios en el índice/);
+  assert.match(history, /Cambios sin preparar/);
+  assert.match(history, /class="history-splitter"/);
+  assert.match(history, /<DiffView/);
+  assert.match(diffView, /buildFileTree/);
   assert.match(client, /invoke<GitLogPage>\('git_log', \{ cwd, skip \}\)/);
   assert.match(client, /invoke<GitCommitDetail>\('git_show', \{ cwd, hash \}\)/);
 });

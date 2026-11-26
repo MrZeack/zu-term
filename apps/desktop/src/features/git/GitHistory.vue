@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, nextTick, useTemplateRef } from 'vue';
+import { computed, nextTick, ref, useTemplateRef } from 'vue';
 import DiffView from './DiffView.vue';
-import { parseUnifiedDiff } from './git-diff.ts';
+import { parseUnifiedDiff, type GitDiff } from './git-diff.ts';
 import {
   computeGraph,
   formatCommitDate,
@@ -10,12 +10,16 @@ import {
   type GitCommitDetail,
   type GraphLine,
 } from './git-log.ts';
+import { LOCAL_STAGED, LOCAL_UNSTAGED } from './git-view.ts';
 
 const props = defineProps<{
   commits: GitCommit[];
   hasMore: boolean;
   loading: boolean;
   error: string;
+  changes?: GitDiff | undefined;
+  changesError: string;
+  local: { staged: boolean; unstaged: boolean };
   selected: string | null;
   detailLoading: boolean;
   detailError: string;
@@ -27,8 +31,8 @@ const emit = defineEmits<{
   loadMore: [];
 }>();
 
-const ROW_HEIGHT = 26;
-const COLUMN_WIDTH = 14;
+const ROW_HEIGHT = 22;
+const COLUMN_WIDTH = 12;
 const COLORS = [
   '#00b7d5',
   '#00ca91',
@@ -39,17 +43,60 @@ const COLORS = [
   '#60a5fa',
   '#f87171',
 ];
+// gitk: red for work not in the index, green for what is staged.
+const LOCAL_COLORS: Record<string, string> = {
+  [LOCAL_UNSTAGED]: '#f87171',
+  [LOCAL_STAGED]: '#4ade80',
+};
+const LOCAL_LABELS: Record<string, string> = {
+  [LOCAL_UNSTAGED]: 'Cambios sin preparar (no están en el índice)',
+  [LOCAL_STAGED]: 'Cambios en el índice, sin commitear',
+};
 
+const container = useTemplateRef<HTMLElement>('container');
 const list = useTemplateRef<HTMLElement>('list');
-const graph = computed(() => computeGraph(props.commits));
+const listHeight = ref(180);
+
+const headHash = computed(
+  () =>
+    props.commits.find((c) => c.refs.some((r) => r === 'HEAD' || r.startsWith('HEAD -> ')))?.hash,
+);
+
+// Uncommitted work joins the graph above HEAD, as in gitk.
+const rows = computed<GitCommit[]>(() => {
+  const head = headHash.value ? [headHash.value] : [];
+  const local: GitCommit[] = [];
+  const pseudo = (hash: string, parents: string[]): GitCommit => ({
+    hash,
+    parents,
+    author: '',
+    time: 0,
+    refs: [],
+    subject: LOCAL_LABELS[hash] ?? '',
+  });
+  if (props.local.unstaged) {
+    local.push(pseudo(LOCAL_UNSTAGED, props.local.staged ? [LOCAL_STAGED] : head));
+  }
+  if (props.local.staged) local.push(pseudo(LOCAL_STAGED, head));
+  return [...local, ...props.commits];
+});
+const isLocal = (hash: string) => hash in LOCAL_COLORS;
+
+const graph = computed(() => computeGraph(rows.value));
 const graphWidth = computed(
   () => Math.max(1, ...graph.value.map((row) => row.width)) * COLUMN_WIDTH + 4,
 );
 const selectedCommit = computed(() => props.commits.find((c) => c.hash === props.selected));
-const detailFiles = computed(() => parseUnifiedDiff(props.detail?.diff ?? ''));
+const detailFiles = computed(() => {
+  if (props.selected === LOCAL_STAGED) return parseUnifiedDiff(props.changes?.staged ?? '');
+  if (props.selected === LOCAL_UNSTAGED) return parseUnifiedDiff(props.changes?.unstaged ?? '');
+  return parseUnifiedDiff(props.detail?.diff ?? '');
+});
 
 const x = (column: number) => column * COLUMN_WIDTH + COLUMN_WIDTH / 2 + 2;
 const color = (index: number) => COLORS[index % COLORS.length];
+const dotColor = (hash: string, index: number) =>
+  LOCAL_COLORS[hash] ?? color(graph.value[index]?.color ?? 0);
 
 function linePath(line: GraphLine): string {
   const middle = ROW_HEIGHT / 2;
@@ -62,24 +109,45 @@ function linePath(line: GraphLine): string {
 
 // Up and down move the selection, as in gitk.
 async function move(step: number) {
-  if (props.commits.length === 0) return;
-  const current = props.commits.findIndex((c) => c.hash === props.selected);
-  const next = Math.min(props.commits.length - 1, Math.max(0, current + step));
-  const target = props.commits[next];
+  if (rows.value.length === 0) return;
+  const current = rows.value.findIndex((c) => c.hash === props.selected);
+  const next = Math.min(rows.value.length - 1, Math.max(0, current + step));
+  const target = rows.value[next];
   if (!target || target.hash === props.selected) return;
   emit('select', target.hash);
   await nextTick();
   list.value?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
 }
+
+// Dragging the bar between the list and the diff resizes the list.
+function startResize(event: PointerEvent) {
+  const handle = event.currentTarget as HTMLElement;
+  const top = container.value?.getBoundingClientRect().top ?? 0;
+  const total = container.value?.clientHeight ?? 0;
+  handle.setPointerCapture(event.pointerId);
+  const onMove = (move: PointerEvent) => {
+    listHeight.value = Math.round(
+      Math.min(Math.max(move.clientY - top, ROW_HEIGHT * 3), total * 0.75),
+    );
+  };
+  const onUp = () => {
+    handle.removeEventListener('pointermove', onMove);
+    handle.removeEventListener('pointerup', onUp);
+    handle.removeEventListener('pointercancel', onUp);
+  };
+  handle.addEventListener('pointermove', onMove);
+  handle.addEventListener('pointerup', onUp);
+  handle.addEventListener('pointercancel', onUp);
+}
 </script>
 
 <template>
-  <div class="history">
-    <p v-if="error && commits.length === 0" class="history-state history-error" role="alert">
+  <div ref="container" class="history">
+    <p v-if="error && rows.length === 0" class="history-state history-error" role="alert">
       {{ error }}
     </p>
-    <p v-else-if="loading && commits.length === 0" class="history-state">Leyendo historial…</p>
-    <p v-else-if="commits.length === 0" class="history-state">El repositorio no tiene commits.</p>
+    <p v-else-if="loading && rows.length === 0" class="history-state">Leyendo historial…</p>
+    <p v-else-if="rows.length === 0" class="history-state">El repositorio no tiene commits.</p>
     <template v-else>
       <div
         ref="list"
@@ -87,13 +155,15 @@ async function move(step: number) {
         role="listbox"
         aria-label="Commits"
         tabindex="0"
+        :style="{ height: `${listHeight}px` }"
         @keydown.down.prevent="move(1)"
         @keydown.up.prevent="move(-1)"
       >
         <div
-          v-for="(commit, index) in commits"
+          v-for="(commit, index) in rows"
           :key="commit.hash"
           class="commit-row"
+          :class="{ local: isLocal(commit.hash) }"
           role="option"
           :aria-selected="commit.hash === selected"
           @click="emit('select', commit.hash)"
@@ -117,8 +187,8 @@ async function move(step: number) {
               :cx="x(graph[index]?.column ?? 0)"
               :cy="ROW_HEIGHT / 2"
               :r="commit.parents.length > 1 ? 3 : 4"
-              :fill="color(graph[index]?.color ?? 0)"
-              :stroke="commit.parents.length > 1 ? color(graph[index]?.color ?? 0) : 'none'"
+              :fill="dotColor(commit.hash, index)"
+              :stroke="commit.parents.length > 1 ? dotColor(commit.hash, index) : 'none'"
               stroke-width="2"
             />
           </svg>
@@ -132,8 +202,10 @@ async function move(step: number) {
             >
             {{ commit.subject }}
           </span>
-          <span class="commit-author">{{ commit.author }}</span>
-          <span class="commit-date">{{ formatCommitDate(commit.time) }}</span>
+          <template v-if="!isLocal(commit.hash)">
+            <span class="commit-author">{{ commit.author }}</span>
+            <span class="commit-date">{{ formatCommitDate(commit.time) }}</span>
+          </template>
         </div>
         <button
           v-if="hasMore"
@@ -145,9 +217,32 @@ async function move(step: number) {
           {{ loading ? 'Cargando…' : 'Cargar más commits' }}
         </button>
         <p v-if="error" class="history-error history-inline" role="alert">{{ error }}</p>
+        <p v-if="changesError" class="history-error history-inline" role="alert">
+          {{ changesError }}
+        </p>
       </div>
+      <div
+        class="history-splitter"
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="Cambiar el alto de la lista de commits"
+        @pointerdown.prevent="startResize"
+      />
       <div class="commit-detail">
-        <p v-if="!selectedCommit" class="history-state">Elige un commit para ver sus cambios.</p>
+        <DiffView
+          v-if="selected === LOCAL_STAGED || selected === LOCAL_UNSTAGED"
+          :files="detailFiles"
+          :untracked="selected === LOCAL_UNSTAGED ? changes?.untracked : undefined"
+          :truncated="changes?.truncated"
+        >
+          <header class="commit-meta local-meta">
+            <span class="local-dot" :style="{ background: LOCAL_COLORS[selected] }" />
+            {{ LOCAL_LABELS[selected] }}
+          </header>
+        </DiffView>
+        <p v-else-if="!selectedCommit" class="history-state">
+          Elige un commit para ver sus cambios.
+        </p>
         <p v-else-if="detailLoading" class="history-state">Leyendo commit…</p>
         <p v-else-if="detailError" class="history-state history-error" role="alert">
           {{ detailError }}
@@ -204,14 +299,13 @@ async function move(step: number) {
 
 .history-inline {
   margin: 0;
-  padding: 8px 14px;
+  padding: 6px 14px;
   font-size: 12px;
 }
 
 .commit-list {
-  flex: 0 0 42%;
+  flex: 0 0 auto;
   overflow: auto;
-  border-bottom: 1px solid var(--border-strong);
 }
 
 .commit-list:focus-visible {
@@ -219,11 +313,22 @@ async function move(step: number) {
   outline-offset: -2px;
 }
 
+.history-splitter {
+  flex: 0 0 5px;
+  border-top: 1px solid var(--border-strong);
+  background: var(--header-bg);
+  cursor: row-resize;
+}
+
+.history-splitter:hover {
+  background: var(--accent-soft);
+}
+
 .commit-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  height: 26px;
+  gap: 8px;
+  height: 22px;
   padding-right: 12px;
   cursor: pointer;
   font-size: 12px;
@@ -236,6 +341,11 @@ async function move(step: number) {
 .commit-row[aria-selected='true'] {
   background: var(--accent-alt-soft);
   box-shadow: inset 2px 0 0 var(--accent-alt);
+}
+
+.commit-row.local .commit-subject {
+  color: var(--muted);
+  font-style: italic;
 }
 
 .commit-graph {
@@ -253,12 +363,13 @@ async function move(step: number) {
 .ref-badge {
   display: inline-block;
   margin-right: 5px;
-  padding: 0 5px;
+  padding: 0 4px;
   border: 1px solid;
   border-radius: 4px;
   font-family: Menlo, monospace;
   font-size: 10px;
   font-weight: 700;
+  line-height: 14px;
 }
 
 .ref-badge.head {
@@ -283,7 +394,7 @@ async function move(step: number) {
 }
 
 .commit-author {
-  flex: 0 0 140px;
+  flex: 0 0 130px;
   overflow: hidden;
   color: var(--muted);
   text-overflow: ellipsis;
@@ -299,8 +410,8 @@ async function move(step: number) {
 
 .load-more {
   display: block;
-  margin: 8px auto;
-  padding: 6px 12px;
+  margin: 6px auto;
+  padding: 4px 12px;
   border: 1px solid var(--border-strong);
   border-radius: 7px;
   color: var(--text);
@@ -322,16 +433,29 @@ async function move(step: number) {
 }
 
 .commit-meta {
-  padding: 12px 14px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--border);
   font-size: 12px;
+}
+
+.local-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.local-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
 }
 
 .commit-meta dl {
   display: grid;
   grid-template-columns: max-content 1fr;
-  gap: 3px 12px;
-  margin: 0 0 10px;
+  gap: 2px 12px;
+  margin: 0 0 8px;
 }
 
 .commit-meta dt {

@@ -290,10 +290,10 @@ const dropPreviewRect = computed<Rect | null>(() => {
     />
     <GitDiffDialog
       :view="git.state"
+      :local="git.local.value"
       :path="shortPath(git.state.cwd, props.home, PATH_MAX)"
       @close="git.close"
       @refresh="git.refresh"
-      @tab="git.setTab"
       @select="git.select"
       @load-more="git.loadMore"
     />

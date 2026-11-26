@@ -1,14 +1,18 @@
 <script setup lang="ts">
-import { useTemplateRef } from 'vue';
+import { computed, ref, useTemplateRef } from 'vue';
+import { buildFileTree, hiddenByCollapse } from './file-tree.ts';
 import type { DiffFile } from './git-diff.ts';
 
-defineProps<{
+const props = defineProps<{
   files: DiffFile[];
   untracked?: string[] | undefined;
   truncated?: boolean | undefined;
 }>();
 
 const body = useTemplateRef<HTMLElement>('body');
+const collapsed = ref(new Set<string>());
+const tree = computed(() => buildFileTree(props.files.map((file) => file.path)));
+const untrackedTree = computed(() => buildFileTree(props.untracked ?? []));
 
 const STATUS_LABELS: Record<DiffFile['status'], string> = {
   added: 'A',
@@ -16,6 +20,15 @@ const STATUS_LABELS: Record<DiffFile['status'], string> = {
   modified: 'M',
   renamed: 'R',
 };
+
+function toggle(key: string) {
+  const next = new Set(collapsed.value);
+  if (!next.delete(key)) next.add(key);
+  collapsed.value = next;
+}
+
+const visible = (rows: ReturnType<typeof buildFileTree>, scope: string) =>
+  rows.filter((row) => !hiddenByCollapse({ ...row, path: `${scope}${row.path}` }, collapsed.value));
 
 function showFile(index: number) {
   body.value
@@ -27,27 +40,68 @@ function showFile(index: number) {
 <template>
   <div class="diff-content">
     <nav class="diff-files" aria-label="Archivos con cambios">
-      <button
-        v-for="(file, index) in files"
-        :key="`${index}-${file.path}`"
-        class="diff-file-link"
-        type="button"
-        :title="file.oldPath ? `${file.oldPath} → ${file.path}` : file.path"
-        @click="showFile(index)"
-      >
-        <span class="file-status" :class="file.status">{{ STATUS_LABELS[file.status] }}</span>
-        <span class="file-name">{{ file.path }}</span>
-        <span class="file-counts">
-          <b v-if="file.additions" class="add">+{{ file.additions }}</b>
-          <b v-if="file.deletions" class="del">−{{ file.deletions }}</b>
-        </span>
-      </button>
+      <template v-for="row in visible(tree, 'c:')" :key="`c:${row.path}`">
+        <button
+          v-if="row.kind === 'folder'"
+          class="tree-folder"
+          type="button"
+          :style="{ paddingLeft: `${6 + row.depth * 12}px` }"
+          :aria-expanded="!collapsed.has(`c:${row.path}`)"
+          :title="row.path"
+          @click="toggle(`c:${row.path}`)"
+        >
+          <span class="tree-caret" aria-hidden="true">{{
+            collapsed.has(`c:${row.path}`) ? '▸' : '▾'
+          }}</span>
+          <span class="tree-label">{{ row.label }}/</span>
+        </button>
+        <button
+          v-else
+          class="diff-file-link"
+          type="button"
+          :style="{ paddingLeft: `${6 + row.depth * 12}px` }"
+          :title="
+            files[row.index]?.oldPath ? `${files[row.index]?.oldPath} → ${row.path}` : row.path
+          "
+          @click="showFile(row.index)"
+        >
+          <span class="file-status" :class="files[row.index]?.status">{{
+            STATUS_LABELS[files[row.index]?.status ?? 'modified']
+          }}</span>
+          <span class="tree-label">{{ row.label }}</span>
+          <span class="file-counts">
+            <b v-if="files[row.index]?.additions" class="add">+{{ files[row.index]?.additions }}</b>
+            <b v-if="files[row.index]?.deletions" class="del">−{{ files[row.index]?.deletions }}</b>
+          </span>
+        </button>
+      </template>
       <template v-if="untracked?.length">
         <span class="diff-files-title">Sin seguimiento</span>
-        <span v-for="name in untracked" :key="name" class="diff-file-link untracked" :title="name">
-          <span class="file-status added">?</span>
-          <span class="file-name">{{ name }}</span>
-        </span>
+        <template v-for="row in visible(untrackedTree, 'u:')" :key="`u:${row.path}`">
+          <button
+            v-if="row.kind === 'folder'"
+            class="tree-folder"
+            type="button"
+            :style="{ paddingLeft: `${6 + row.depth * 12}px` }"
+            :aria-expanded="!collapsed.has(`u:${row.path}`)"
+            :title="row.path"
+            @click="toggle(`u:${row.path}`)"
+          >
+            <span class="tree-caret" aria-hidden="true">{{
+              collapsed.has(`u:${row.path}`) ? '▸' : '▾'
+            }}</span>
+            <span class="tree-label">{{ row.label }}/</span>
+          </button>
+          <span
+            v-else
+            class="diff-file-link untracked"
+            :style="{ paddingLeft: `${6 + row.depth * 12}px` }"
+            :title="row.path"
+          >
+            <span class="file-status added">?</span>
+            <span class="tree-label">{{ row.label }}</span>
+          </span>
+        </template>
       </template>
     </nav>
     <div ref="body" class="diff-body">
@@ -86,7 +140,7 @@ function showFile(index: number) {
 
 .diff-files {
   display: flex;
-  flex: 0 0 240px;
+  flex: 0 0 280px;
   flex-direction: column;
   gap: 1px;
   padding: 8px;
@@ -105,9 +159,9 @@ function showFile(index: number) {
 
 .diff-file-link {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
-  padding: 5px 6px;
+  padding: 4px 6px;
   border: 0;
   border-radius: 6px;
   color: var(--text);
@@ -157,14 +211,38 @@ function showFile(index: number) {
   color: var(--accent);
 }
 
-.file-name {
+.tree-folder {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  font-family: Menlo, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: left;
+}
+
+.tree-folder:hover,
+.tree-folder:focus-visible {
+  color: var(--text);
+  background: var(--accent-soft);
+}
+
+.tree-caret {
+  flex: 0 0 auto;
+  width: 10px;
+}
+
+/* Full names, wrapped instead of cut. */
+.tree-label {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  direction: rtl;
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .file-counts {
