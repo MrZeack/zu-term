@@ -10,7 +10,12 @@ export type DiffLineKind = 'hunk' | 'add' | 'del' | 'context' | 'meta';
 export interface DiffLine {
   kind: DiffLineKind;
   text: string;
+  // Line number in the old and the new file, when the line exists there.
+  oldLine?: number;
+  newLine?: number;
 }
+
+const HUNK_START = /^@@+ -(\d+)(?:,\d+)? \+(\d+)/;
 
 export interface DiffFile {
   path: string;
@@ -40,6 +45,8 @@ export function parseUnifiedDiff(text: string): DiffFile[] {
   const files: DiffFile[] = [];
   let file: DiffFile | undefined;
   let inHunk = false;
+  let oldLine = 0;
+  let newLine = 0;
 
   for (const line of text.split('\n')) {
     if (line.startsWith('diff --git ')) {
@@ -58,15 +65,18 @@ export function parseUnifiedDiff(text: string): DiffFile[] {
 
     if (line.startsWith('@@')) {
       inHunk = true;
+      const start = HUNK_START.exec(line);
+      oldLine = Number(start?.[1] ?? 0);
+      newLine = Number(start?.[2] ?? 0);
       file.lines.push({ kind: 'hunk', text: line });
     } else if (inHunk && line.startsWith('+')) {
       file.additions += 1;
-      file.lines.push({ kind: 'add', text: line });
+      file.lines.push({ kind: 'add', text: line, newLine: newLine++ });
     } else if (inHunk && line.startsWith('-')) {
       file.deletions += 1;
-      file.lines.push({ kind: 'del', text: line });
+      file.lines.push({ kind: 'del', text: line, oldLine: oldLine++ });
     } else if (inHunk && line.startsWith(' ')) {
-      file.lines.push({ kind: 'context', text: line });
+      file.lines.push({ kind: 'context', text: line, oldLine: oldLine++, newLine: newLine++ });
     } else if (inHunk && line.startsWith('\\')) {
       file.lines.push({ kind: 'meta', text: line });
     } else if (line.startsWith('--- ')) {

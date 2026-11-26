@@ -58,6 +58,50 @@ test('separa el diff por archivo con su estado y sus líneas', () => {
   ]);
 });
 
+test('numera cada línea en el archivo viejo y en el nuevo', () => {
+  const [file] = parseUnifiedDiff(
+    [
+      'diff --git a/a.ts b/a.ts',
+      '--- a/a.ts',
+      '+++ b/a.ts',
+      '@@ -10,4 +10,4 @@',
+      ' uno',
+      '-dos',
+      '+DOS',
+      '+extra',
+      ' tres',
+      '\\ No newline at end of file',
+      '@@ -40 +41 @@',
+      '-x',
+      '+y',
+    ].join('\n'),
+  );
+
+  assert.deepEqual(
+    file?.lines.map(({ kind, oldLine, newLine }) => [kind, oldLine, newLine]),
+    [
+      ['hunk', undefined, undefined],
+      ['context', 10, 10],
+      ['del', 11, undefined],
+      ['add', undefined, 11],
+      ['add', undefined, 12],
+      ['context', 12, 13],
+      ['meta', undefined, undefined],
+      ['hunk', undefined, undefined],
+      ['del', 40, undefined],
+      ['add', undefined, 41],
+    ],
+  );
+});
+
+test('la vista del diff muestra ambas columnas de números', async () => {
+  const view = await readFile(new URL('./DiffView.vue', import.meta.url), 'utf8');
+
+  assert.match(view, /class="line-number"[^>]*>\{\{ line\.oldLine \?\? '' \}\}/);
+  assert.match(view, /class="line-number new"[^>]*>\{\{ line\.newLine \?\? '' \}\}/);
+  assert.match(view, /user-select: none/);
+});
+
 test('resume archivos, líneas añadidas y borradas', () => {
   assert.deepEqual(diffSummary(parseUnifiedDiff(SAMPLE)), {
     files: 5,

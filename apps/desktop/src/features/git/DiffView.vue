@@ -60,13 +60,16 @@ function showFile(index: number) {
           <span v-if="file.oldPath">{{ file.oldPath }} → </span>{{ file.path }}
         </h3>
         <div class="diff-lines">
-          <code
+          <div
             v-for="(line, lineIndex) in file.lines"
             :key="lineIndex"
             class="diff-line"
             :class="line.kind"
-            >{{ line.text || ' ' }}</code
           >
+            <span class="line-number" aria-hidden="true">{{ line.oldLine ?? '' }}</span>
+            <span class="line-number new" aria-hidden="true">{{ line.newLine ?? '' }}</span>
+            <code class="line-text">{{ line.text || ' ' }}</code>
+          </div>
         </div>
         <p v-if="file.lines.length === 0" class="diff-note">Sin cambios de contenido.</p>
       </section>
@@ -196,6 +199,8 @@ function showFile(index: number) {
 }
 
 .diff-lines {
+  width: max-content;
+  min-width: 100%;
   padding: 4px 0 12px;
   background: var(--pane-bg);
   font-family: Menlo, monospace;
@@ -204,8 +209,29 @@ function showFile(index: number) {
 }
 
 .diff-line {
-  display: block;
-  padding: 0 14px;
+  display: flex;
+}
+
+/* Numbers stay in view when the code scrolls sideways. */
+.line-number {
+  position: sticky;
+  left: 0;
+  flex: 0 0 44px;
+  padding: 0 8px 0 4px;
+  color: var(--muted);
+  background: var(--pane-bg);
+  opacity: 0.75;
+  text-align: right;
+  user-select: none;
+}
+
+.line-number.new {
+  left: 44px;
+  border-right: 1px solid var(--border);
+}
+
+.line-text {
+  padding: 0 14px 0 10px;
   font-family: inherit;
   white-space: pre;
 }
